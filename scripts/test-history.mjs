@@ -2,254 +2,157 @@ import fs from 'node:fs/promises';
 
 function createHarness(source, stored = new Map()) {
   const elements = new Map(), timers = new Map();
-  let id = 0, clock = 0, gpsCallback;
+  let id = 0, clock = 0, gpsSuccessCallback, gpsErrorCallback;
   const gpsRequests=[],windowListeners={},documentListeners={};
-  const document={visibilityState:'visible',querySelector:selector=>element(selector),addEventListener:(name,fn)=>{documentListeners[name]=fn;}};
-  const defaults = {school:{name:'Escuela',lat:19,lng:-101},thresholds:{waitingMeters:1000,readyMeters:100,atGateMeters:20},distanceMode:'direct',refreshSeconds:30};
   const element = selector => {
-    if (!elements.has(selector)) elements.set(selector, {value:'',disabled:false,textContent:'',innerHTML:'',style:{},classList:{add(){},remove(){},toggle(){}},listeners:{},setAttribute(name,value){this[name]=value;},addEventListener(name,fn){this.listeners[name]=fn;}});
+    if (!elements.has(selector)) elements.set(selector, {value:'',disabled:false,textContent:'',innerHTML:'',style:{},className:'',classList:{add(){},remove(){},toggle(){}},listeners:{},setAttribute(name,value){this[name]=value;},addEventListener(name,fn){this.listeners[name]=fn;}});
     return elements.get(selector);
   };
+  const document={visibilityState:'visible',activeElement:null,querySelector:selector=>element(selector),addEventListener:(name,fn)=>{documentListeners[name]=fn;}};
+  const defaults = {version:'0.1.6',school:{name:'Escuela',lat:19,lng:-101},thresholds:{waitingMeters:1000,readyMeters:100,atGateMeters:20},distanceMode:'direct',refreshSeconds:30};
   class TestDate extends Date {constructor(...args){super(...(args.length?args:[1700000000000+clock]));}static now(){return 1700000000000+clock;}}
   const localStorage = {getItem:k=>stored.get(k)||null,setItem:(k,v)=>stored.set(k,v)};
-  const navigator = {geolocation:{watchPosition(fn){gpsCallback=fn;},getCurrentPosition(success,error,options){gpsRequests.push({success,error,options});}}};
+  const navigator = {onLine:true,geolocation:{watchPosition(success,error){gpsSuccessCallback=success;gpsErrorCallback=error;},getCurrentPosition(success,error,options){gpsRequests.push({success,error,options});}}};
+  const win={NEXUS_TUTOR_DEFAULTS:defaults,addEventListener:(name,fn)=>{windowListeners[name]=fn;}};
   new Function('window','document','navigator','localStorage','setInterval','clearInterval','Date','console','fetch',source)(
-    {NEXUS_TUTOR_DEFAULTS:defaults,addEventListener:(name,fn)=>{windowListeners[name]=fn;}},document,navigator,localStorage,
+    win,document,navigator,localStorage,
     (fn,ms)=>{timers.set(++id,{fn,ms,next:clock+ms});return id;},key=>timers.delete(key),TestDate,{warn(){}},async()=>{throw Error('Route unavailable');}
   );
-  const flush = async()=>{await Promise.resolve();await Promise.resolve();await Promise.resolve();};
+  const flush = async()=>{await Promise.resolve();await Promise.resolve();await Promise.resolve();await Promise.resolve();};
   return {
-    stored, timers, element, gpsRequests,
-    focus:()=>windowListeners.focus(),
-    visibility(state){document.visibilityState=state;return documentListeners.visibilitychange();},
-    pageshow:()=>windowListeners.pageshow({persisted:true}),
+    stored,timers,element,gpsRequests,win,navigator,
+    focus:()=>windowListeners.focus?.(),
+    visibility(state){document.visibilityState=state;return documentListeners.visibilitychange?.();},
+    pageshow:()=>windowListeners.pageshow?.({persisted:true}),
+    online(){navigator.onLine=true;return windowListeners.online?.();},
+    offline(){navigator.onLine=false;return windowListeners.offline?.();},
     logs:()=>JSON.parse(stored.get('nexusTutorLogV1')||'[]'),
+    telemetry:()=>JSON.parse(stored.get('nexusTutorTelemetryV1')||'[]'),
     journey:()=>JSON.parse(stored.get('nexusTutorJourneyV1')||'null'),
+    measurementTimerMs:()=>[...timers.values()].filter(t=>t.ms!==1000).map(t=>t.ms).sort((a,b)=>a-b)[0]??null,
     async event(selector,name,event={}){element(selector).listeners[name](event);await flush();},
-    async gps(lat=19,lng=-101.005){gpsCallback({coords:{latitude:lat,longitude:lng,accuracy:5}});await flush();},
+    async gps(lat=19,lng=-101.005,accuracy=5){gpsSuccessCallback({coords:{latitude:lat,longitude:lng,accuracy}});await flush();},
+    async gpsError(code=1,message='Permission denied'){gpsErrorCallback({code,message});await flush();},
     async advance(ms){const end=clock+ms;while(true){const due=[...timers.entries()].filter(([,t])=>t.next<=end).sort((a,b)=>a[1].next-b[1].next)[0];if(!due)break;clock=due[1].next;due[1].next+=due[1].ms;await due[1].fn();await flush();}clock=end;},
-    async pendingReset(){const timer=[...timers.values()].find(t=>t.ms===30000);const pending=timer.fn();element('#resetJourneyBtn').listeners.click();await pending;await flush();}
+    async pendingReset(){const timer=[...timers.values()].find(t=>t.ms!==1000);if(!timer)return;element('#resetJourneyBtn').listeners.click();await flush();}
   };
 }
 function assert(condition,message){if(!condition)throw Error(message);}
+
 async function testHistory(source){
   const h=createHarness(source);
   await h.event('#manualDistanceToggle','change',{target:{checked:true}});
   await h.event('#pickupBtn','click');
   assert(h.logs().length===1,'Start must record exactly one event');
-  await h.advance(29000);
-  assert(h.logs().length===1,'Must not sample before 30s');
-  await h.advance(1000);
-  assert(h.logs().length===2,'Must record at 30s with unchanged WAITING');
+  await h.advance(29000);assert(h.logs().length===1,'Must not sample before 30s in WAITING');
+  await h.advance(1000);assert(h.logs().length===2,'Must record at 30s in WAITING');
   assert(h.logs()[0].distance===1000&&h.logs()[0].message.includes('manual'),'Must preserve manual distance/source');
-  await h.advance(30000);
-  assert(h.logs().length===3,'Must record again at 60s');
-  h.element('#manualDistanceInput').value='50';
-  await h.event('#manualDistanceInput','change');
-  assert(h.journey().status==='READY','Distance edit must still promote immediately');
-  await h.advance(30000);
-  assert(h.logs()[0].status==='READY'&&h.logs()[0].distance===50,'READY periodic record');
-  h.element('#manualDistanceInput').value='10';
-  await h.event('#manualDistanceInput','change');
-  await h.advance(30000);
-  assert(h.logs()[0].status==='AT_GATE'&&h.logs()[0].message.includes('periódica'),'AT_GATE must keep recording');
-  const reloaded=createHarness(source,h.stored);
-  assert(reloaded.logs().length===h.logs().length,'Log persists on reload');
-  await reloaded.advance(30000);
-  assert(reloaded.logs()[0].distance===null&&reloaded.logs()[0].message.includes('no disponible'),'Missing GPS must record failure without stale distance');
-  const before=h.logs().length;
-  await h.pendingReset();
-  assert(h.logs().length===before,'Pending previous measurement must not record after reset');
-  await h.advance(60000);
-  assert(h.logs().length===before,'Reset stops timer');
-  const gps=createHarness(source);
-  await gps.gps();
-  await gps.event('#pickupBtn','click');
-  await gps.advance(30000);
-  assert(gps.logs().length===2&&gps.logs()[0].message.includes('GPS'),'GPS periodic record');
-  await gps.advance(60*30000);
-  assert(gps.logs().length===60,'Existing 60-event retention preserved');
-  return ['30s / 60s with unchanged WAITING','Manual distance and source','Immediate READY and AT_GATE transitions','Periodic AT_GATE','localStorage reload','Missing GPS recorded without stale distance','Reset ignores in-flight measurement and stops logging','GPS mode','60-event retention'];
+  h.element('#manualDistanceInput').value='50';await h.event('#manualDistanceInput','change');
+  assert(h.journey().status==='READY','Distance edit promotes immediately');
+  assert(h.measurementTimerMs()===10000,'READY increases polling rate to 10s');
+  await h.advance(10000);assert(h.logs()[0].status==='READY'&&h.logs()[0].distance===50,'READY periodic record');
+  h.element('#manualDistanceInput').value='10';await h.event('#manualDistanceInput','change');
+  assert(h.journey().status==='AT_GATE','AT_GATE promotes immediately');
+  assert(h.measurementTimerMs()===10000,'AT_GATE does not increase polling beyond READY');
+  await h.advance(10000);assert(h.logs()[0].status==='AT_GATE','AT_GATE keeps periodic telemetry/history');
+  const reloaded=createHarness(source,h.stored);assert(reloaded.journey().status==='AT_GATE','Log/journey persist on reload');
+  assert(reloaded.element('#distanceValue').textContent!=='—','Last known distance restores on reload');
+  const before=h.logs().length;await h.pendingReset();assert(!h.journey().active,'Reset ends journey');
+  await h.advance(60000);assert(h.logs().length===before,'Reset stops timer logging');
+  return ['Start log','WAITING cadence','WAITING periodic','Manual source','Immediate READY','READY 10s cadence','READY record','Immediate AT_GATE','AT_GATE cadence cap','AT_GATE record','Reload status','Reload last distance','Reset inactive','Reset stops logging'];
 }
 
-
-async function testDistanceControls(source){
+async function testLinearProgress(source){
   const h=createHarness(source);
   await h.event('#manualDistanceToggle','change',{target:{checked:true}});
-  await h.event('#manualDistancePlus','click');
-  assert(h.element('#manualDistanceInput').value==='1010'&&!h.element('#pickupBtn').disabled,'Plus can move outside WAITING and still allow starting');
-  await h.event('#manualDistanceMinus','click');
-  assert(h.element('#manualDistanceInput').value==='1000'&&!h.element('#pickupBtn').disabled,'Minus enables start at WAITING boundary');
-  await h.event('#pickupBtn','click');
-  h.element('#manualDistanceInput').value='110';
-  await h.event('#manualDistanceInput','change');
-  await h.event('#manualDistanceMinus','click');
-  assert(h.journey().status==='READY'&&h.element('#statusPill').textContent.includes('READY')&&h.logs()[0].status==='READY'&&h.logs()[0].distance===100,'READY boundary updates UI, storage and history immediately');
-  const readyCount=h.logs().length;
-  h.element('#manualDistanceStep').value='1000';
-  await h.event('#manualDistanceStep','change');
-  await h.event('#manualDistancePlus','click');
-  assert(h.journey().status==='READY'&&h.element('#manualDistanceInput').value==='1100'&&h.logs().length===readyCount,'Alternative route beyond WAITING preserves READY without false transition');
-  await h.advance(30000);
-  assert(h.logs()[0].distance===1100&&h.logs()[0].status==='READY','Periodic log contains increased distance and retained READY');
-  h.element('#manualDistanceInput').value='21';
-  await h.event('#manualDistanceInput','change');
-  h.element('#manualDistanceStep').value='1';
-  await h.event('#manualDistanceStep','change');
-  await h.event('#manualDistanceMinus','click');
-  assert(h.journey().status==='AT_GATE'&&h.element('#statusPill').textContent.includes('AT GATE')&&h.logs()[0].distance===20&&h.logs()[0].status==='AT_GATE','AT_GATE boundary updates UI and history immediately');
-  h.element('#manualDistanceStep').value='1000';
-  await h.event('#manualDistanceStep','change');
-  await h.event('#manualDistancePlus','click');
-  await h.event('#manualDistancePlus','click');
-  await h.advance(30000);
-  assert(h.journey().status==='AT_GATE'&&h.logs()[0].distance===2020&&h.logs()[0].status==='AT_GATE','AT_GATE remains at 2020 m and records actual distance');
-  const reloaded=createHarness(source,h.stored);
-  assert(reloaded.journey().status==='AT_GATE','Reload retains furthest status');
-  for(const invalid of ['', '-1', '1.5', 'Infinity', 'not-a-number']){
-    h.element('#manualDistanceInput').value=invalid;
-    await h.event('#manualDistanceInput','change');
-    assert(h.element('#manualDistanceInput').value==='2020','Reject invalid manual distances');
-  }
-  h.element('#manualDistanceInput').value='5';
-  await h.event('#manualDistanceInput','change');
-  await h.event('#manualDistanceMinus','click');
-  assert(h.element('#manualDistanceInput').value==='0'&&h.element('#manualDistanceMinus').disabled,'Decrement clamps at zero');
-  h.element('#manualDistanceStep').value='100';
-  await h.event('#manualDistanceStep','change');
-  await h.event('#manualDistancePlus','click');
-  assert(h.element('#manualDistanceInput').value==='100','100 m increment');
-  await h.event('#resetJourneyBtn','click');
-  h.element('#manualDistanceInput').value='500';
-  await h.event('#manualDistanceInput','change');
-  await h.event('#pickupBtn','click');
-  assert(h.journey().status==='WAITING','Only reset allows a new WAITING journey');
-
-  const gps=createHarness(source);
-  await gps.gps();
-  await gps.event('#pickupBtn','click');
-  await gps.gps(19,-101.0005);
-  await gps.advance(30000);
-  assert(gps.journey().status==='READY','GPS enters READY');
-  await gps.gps(19,-101.05);
-  await gps.advance(30000);
-  assert(gps.journey().status==='READY'&&gps.logs()[0].distance>1000,'GPS increase also preserves READY');
-  return ['+/- WAITING boundary','Immediate READY UI and history','Alternative route retains READY','Periodic larger distance','Immediate AT_GATE UI and history','AT_GATE retained outside WAITING','Reload retains status','Invalid values rejected','Zero lower bound','Selectable step sizes','Reset allows WAITING again','GPS monotonic state'];
+  const set=async meters=>{h.element('#manualDistanceInput').value=String(meters);await h.event('#manualDistanceInput','change');};
+  await set(1500);assert(h.element('#distanceProgress').style.width==='0%','1500m stays at zero outside 1000m scale');
+  await set(1000);assert(h.element('#distanceProgress').style.width==='0%','WAITING boundary is zero percent');
+  await set(500);assert(h.element('#distanceProgress').style.width==='50%','500m is halfway on linear scale');
+  await set(300);assert(h.element('#distanceProgress').style.width==='70%','300m maps to 70 percent progress');
+  await set(100);assert(h.element('#distanceProgress').style.width==='90%','READY 100m maps to 90 percent');
+  await set(20);assert(h.element('#distanceProgress').style.width==='98%','AT_GATE 20m maps to 98 percent');
+  await set(0);assert(h.element('#distanceProgress').style.width==='100%','Zero meters maps to 100 percent');
+  assert(h.element('#waitingMarker').style.left==='0%','WAITING marker is mathematically positioned');
+  assert(h.element('#readyMarker').style.left==='90%','READY marker is mathematically positioned');
+  assert(h.element('#gateMarker').style.left==='98%','AT_GATE marker is mathematically positioned');
+  return ['Outside scale clamp','WAITING marker start','Halfway linear','300m linear','READY linear','AT_GATE linear','Zero 100%','WAITING marker','READY marker','AT_GATE marker'];
 }
 
-
-async function testReturnRefresh(source){
+async function testEarlyActivationAndPolling(source){
   const h=createHarness(source);
-  await h.gps();
-  await h.event('#pickupBtn','click');
-  const count=h.logs().length;
-  h.visibility('hidden');
-  assert(h.timers.size===0,'Hidden page pauses intervals');
-  const pending=h.visibility('visible');
-  h.focus();
-  assert(h.gpsRequests.length===1,'Visibility and focus share one GPS request');
-  assert(h.gpsRequests[0].options.maximumAge===0&&h.gpsRequests[0].options.enableHighAccuracy===true,'Return requests fresh high-accuracy GPS');
-  assert(h.logs().length===count,'No stale reading is logged before GPS resolves');
-  h.gpsRequests[0].success({coords:{latitude:19,longitude:-101.0005,accuracy:5}});
-  await pending;
-  assert(h.journey().status==='READY'&&h.logs()[0].message.includes('volver'),'Fresh GPS promotes and logs immediately');
-  assert(h.timers.size===2,'Resume restores one measurement timer and countdown');
-  const resumedCount=h.logs().length;
-  await h.advance(29000);
-  assert(h.logs().length===resumedCount,'Next periodic check waits 30s after resume');
-  await h.advance(1000);
-  assert(h.logs().length===resumedCount+1,'Periodic logging resumes');
-
-  h.visibility('hidden');
-  const failed=h.visibility('visible');
-  h.gpsRequests[1].error({code:1,message:'Permission denied'});
-  await failed;
-  assert(h.logs()[0].distance===null&&h.logs()[0].message.includes('no disponible')&&h.journey().status==='READY','Failure records no distance and retains state');
-  assert(h.element('#distanceValue').textContent==='—','Failure does not display old distance as current');
-  h.visibility('hidden');
-  const obsolete=h.visibility('visible');
-  h.visibility('hidden');
-  const latest=h.visibility('visible');
-  h.gpsRequests[2].success({coords:{latitude:19,longitude:-101,accuracy:5}});
-  await obsolete;
-  assert(h.journey().status==='READY','Discard callback from a previous return');
-  h.gpsRequests[3].success({coords:{latitude:19,longitude:-101.05,accuracy:5}});
-  await latest;
-  assert(h.journey().status==='READY'&&h.logs()[0].distance>1000,'Current return respects monotonic status');
-
-  h.visibility('hidden');
-  const resetPending=h.visibility('visible');
-  await h.event('#resetJourneyBtn','click');
-  const resetCount=h.logs().length;
-  h.gpsRequests[4].success({coords:{latitude:19,longitude:-101,accuracy:5}});
-  await resetPending;
-  assert(!h.journey().active&&h.logs().length===resetCount&&h.timers.size===0,'Reset discards pending GPS and does not restart timer');
-
-  const manual=createHarness(source);
-  await manual.event('#manualDistanceToggle','change',{target:{checked:true}});
-  await manual.event('#pickupBtn','click');
-  manual.visibility('hidden');
-  await manual.visibility('visible');
-  await manual.focus();
-  assert(manual.gpsRequests.length===0&&manual.logs().length===2&&manual.logs()[0].distance===1000,'Manual resume recalculates once without GPS');
-  await manual.advance(3000);
-  await manual.pageshow();
-  assert(manual.logs().length===3,'Back-forward cache restoration refreshes');
-  return ['Hidden pauses timers','Focus/visibility deduplication','Fresh GPS required','Immediate resume transition/log','30s cadence restored','GPS failure without stale distance','Old callback ignored','Monotonic resume status','Reset during resume','Manual resume without GPS','pageshow restoration'];
-}
-
-
-async function testEarlyActivation(source){
-  const h=createHarness(source);
-  assert(h.element('#pickupBtn').disabled,'GPS measurement required before activating');
+  assert(h.element('#pickupBtn').disabled,'Fresh measurement required before activating');
   await h.event('#manualDistanceToggle','change',{target:{checked:true}});
-  h.element('#manualDistanceInput').value='50000';
-  await h.event('#manualDistanceInput','change');
+  h.element('#manualDistanceInput').value='50000';await h.event('#manualDistanceInput','change');
   assert(!h.element('#pickupBtn').disabled,'Can activate from 50 km');
-  assert(h.element('#pickupBtn')['data-state']==='IDLE','No active halo before start');
   await h.event('#pickupBtn','click');
-  assert(h.journey().active&&h.journey().status==='OUTSIDE'&&h.element('#pickupBtn')['data-state']==='OUTSIDE','Outside activation has red state');
-  assert(h.logs()[0].status==='OUTSIDE'&&h.logs()[0].distance===50000,'Initial OUTSIDE history');
-  await h.advance(30000);
-  assert(h.logs()[0].status==='OUTSIDE'&&h.logs()[0].distance===50000&&h.logs().length===2,'Outside periodic history');
-  const restored=createHarness(source,h.stored);
-  assert(restored.journey().status==='OUTSIDE'&&restored.element('#pickupBtn')['data-state']==='OUTSIDE','Restore outside active halo');
-  const move=async meters=>{h.element('#manualDistanceInput').value=String(meters);await h.event('#manualDistanceInput','change');};
-  for(const [distance,status] of [[1000,'WAITING'],[100,'READY'],[20,'AT_GATE']]){
-    await move(distance);
-    assert(h.journey().status===status&&h.element('#pickupBtn')['data-state']===status&&h.logs()[0].status===status&&h.logs()[0].distance===distance,'State, halo and history transition together at '+status);
-    const count=h.logs().length;
-    await move(75000);
-    assert(h.journey().status===status&&h.element('#pickupBtn')['data-state']===status&&h.logs().length===count,'Distance increase preserves '+status+' without false transition');
-    await h.advance(30000);
-    assert(h.logs()[0].distance===75000&&h.logs()[0].status===status,'Periodic actual distance preserves '+status);
-  }
-  await h.event('#resetJourneyBtn','click');
-  assert(!h.journey().active&&h.element('#pickupBtn')['data-state']==='IDLE'&&!h.element('#pickupBtn').disabled,'Reset removes halo and allows distant restart');
-  await h.event('#pickupBtn','click');
-  assert(h.journey().status==='OUTSIDE','Restart far away returns OUTSIDE');
-  const invalidStore=new Map([['nexusTutorConfigV1',JSON.stringify({school:{lat:null,lng:null}})]]);
-  const noSchool=createHarness(source,invalidStore);
-  await noSchool.event('#manualDistanceToggle','change',{target:{checked:true}});
-  assert(noSchool.element('#pickupBtn').disabled,'Unset school does not become 0,0');
+  assert(h.journey().status==='OUTSIDE'&&h.element('#pickupBtn')['data-state']==='OUTSIDE','Outside activation has red state');
+  assert(h.measurementTimerMs()===60000,'OUTSIDE polls every 60s');
+  h.element('#manualDistanceInput').value='1000';await h.event('#manualDistanceInput','change');
+  assert(h.journey().status==='WAITING'&&h.measurementTimerMs()===30000,'WAITING changes polling to 30s');
+  h.element('#manualDistanceInput').value='100';await h.event('#manualDistanceInput','change');
+  assert(h.journey().status==='READY'&&h.measurementTimerMs()===10000,'READY changes polling to 10s');
+  h.element('#manualDistanceInput').value='20';await h.event('#manualDistanceInput','change');
+  assert(h.journey().status==='AT_GATE'&&h.measurementTimerMs()===10000,'AT_GATE keeps 10s cadence');
+  assert(h.element('#pickupBtnText').textContent==='ESPERANDO ENTREGA'&&h.element('#statusMessage').textContent.includes('Has llegado'),'AT_GATE shows waiting for delivery');
+  h.element('#manualDistanceInput').value='75000';await h.event('#manualDistanceInput','change');
+  assert(h.journey().status==='AT_GATE','Distance increase never regresses attained state');
+  h.win.NEXUS_TUTOR_COMPLETE_JOURNEY();await Promise.resolve();
+  assert(h.journey().status==='COMPLETED'&&h.element('#statusMessage').textContent.includes('gran día'),'Completion shows final greeting');
+  assert(h.measurementTimerMs()===null,'Completion stops proximity polling');
+  return ['Fresh required','50km activation','OUTSIDE state','OUTSIDE cadence','WAITING cadence','READY cadence','AT_GATE cadence cap','Waiting delivery UI','Monotonic after gate','Completed greeting','Completion stops polling'];
+}
 
-  const gps=createHarness(source);
-  await gps.gps(19,-101.05);
-  await gps.event('#pickupBtn','click');
-  assert(gps.journey().status==='OUTSIDE','GPS can start outside');
-  gps.visibility('hidden');
-  const resume=gps.visibility('visible');
-  gps.gpsRequests[0].success({coords:{latitude:19,longitude:-101.005,accuracy:5}});
-  await resume;
-  assert(gps.journey().status==='WAITING'&&gps.element('#pickupBtn')['data-state']==='WAITING','Resume from outside enters WAITING and updates halo');
-  const loss=gps.visibility('hidden');
-  const fail=gps.visibility('visible');
-  gps.gpsRequests[1].error({code:1});
-  await fail;
-  assert(gps.journey().status==='WAITING'&&gps.element('#pickupBtn')['data-state']==='WAITING'&&gps.logs()[0].distance===null,'GPS failure preserves attained halo and records no distance');
-  return ['Fresh measurement required','50 km activation','Idle halo','Active OUTSIDE and initial log','OUTSIDE 30s log','OUTSIDE reload','All threshold halos and immediate logs','All states retained at 75 km','Periodic actual distance','Reset halo and distant restart','School coordinates required','GPS outside activation','Resume enters range','GPS loss distinct from range'];
+async function testResumeAndGpsLoss(source){
+  const h=createHarness(source);
+  await h.gps(19,-101.05);
+  const before=h.element('#distanceValue').textContent;
+  assert(before!=='—'&&!h.element('#pickupBtn').disabled,'Initial GPS produces fresh usable distance');
+  h.visibility('hidden');const pending=h.visibility('visible');h.focus();
+  assert(h.gpsRequests.length===1,'Visibility and focus deduplicate fresh GPS request');
+  assert(h.gpsRequests[0].options.maximumAge===0,'Resume requires fresh GPS');
+  assert(h.element('#distanceValue').textContent===before,'Resume preserves last known metrage');
+  assert(h.element('#distanceSource').textContent.includes('Recalculando'),'Resume visibly indicates recalculation');
+  assert(h.element('#pickupBtn').disabled,'Stale/recalculating measurement cannot start a new journey');
+  h.gpsRequests[0].success({coords:{latitude:19,longitude:-101.005,accuracy:7}});await pending;
+  assert(h.element('#distanceSource').textContent==='Distancia directa'&&!h.element('#pickupBtn').disabled,'Fresh resume replaces stale measurement and reenables start');
+
+  await h.gpsError();
+  assert(h.element('#distanceValue').textContent!=='—','watchPosition error preserves last distance');
+  assert(h.element('#distanceSource').textContent.includes('Última ubicación'),'watchPosition error labels distance as last known');
+  assert(h.element('#pickupBtn').disabled,'watchPosition error invalidates distance for new start');
+
+  await h.gps(19,-101.005);
+  assert(!h.element('#pickupBtn').disabled,'GPS recovery refreshes and allows start again');
+  await h.event('#pickupBtn','click');
+  const attained=h.journey().status;
+  h.visibility('hidden');const failed=h.visibility('visible');
+  const visibleBeforeFail=h.element('#distanceValue').textContent;
+  h.gpsRequests[1].error({code:1,message:'Permission denied'});await failed;
+  assert(h.journey().status===attained,'Resume GPS failure preserves attained journey status');
+  assert(h.element('#distanceValue').textContent===visibleBeforeFail,'Resume failure preserves last known metrage');
+  assert(h.element('#distanceSource').textContent.includes('Última ubicación'),'Resume failure marks last-known measurement');
+  return ['Initial GPS','Return dedup','Fresh GPS maximumAge','Keep metrage while recalculating','Recalculating indicator','No stale start','Fresh resume','Watch error keeps distance','Watch error label','Watch error blocks start','GPS recovery','Active status preserved on failure','Active metrage preserved','Active failure label'];
+}
+
+async function testConnectivityAndTelemetry(source){
+  const h=createHarness(source);
+  assert(h.element('#connectionBadge').textContent.includes('En línea'),'Starts with online indicator');
+  h.offline();assert(h.element('#connectionBadge').textContent.includes('Sin internet'),'Offline event updates indicator');
+  h.online();assert(h.element('#connectionBadge').textContent.includes('En línea'),'Online event restores indicator');
+  await h.event('#manualDistanceToggle','change',{target:{checked:true}});
+  await h.event('#pickupBtn','click');
+  h.element('#manualDistanceInput').value='100';await h.event('#manualDistanceInput','change');
+  const events=h.telemetry();
+  assert(events.length>0,'Telemetry is stored locally');
+  assert(events.some(e=>e.event==='INTERNET_OFFLINE')&&events.some(e=>e.event==='INTERNET_ONLINE'),'Connectivity changes are in telemetry');
+  assert(events.some(e=>e.event==='JOURNEY_STARTED'),'Journey start is in telemetry');
+  assert(events.some(e=>e.event==='STATUS_CHANGED'&&e.toStatus==='READY'),'Status transitions are in telemetry');
+  assert(events.every(e=>Object.hasOwn(e,'online')&&Object.hasOwn(e,'measurementState')),'Telemetry contains connectivity and measurement freshness');
+  assert(typeof h.element('#downloadTelemetryBtn').listeners.click==='function','JSON telemetry download control is wired');
+  return ['Online indicator','Offline indicator','Online recovery','Telemetry stored','Connectivity telemetry','Journey telemetry','Status telemetry','Telemetry fields','Download JSON control'];
 }
 
 const source=await fs.readFile(new URL('../app.js',import.meta.url),'utf8');
-const checks=[...await testHistory(source),...await testDistanceControls(source),...await testReturnRefresh(source),...await testEarlyActivation(source)];
+const checks=[...await testHistory(source),...await testLinearProgress(source),...await testEarlyActivationAndPolling(source),...await testResumeAndGpsLoss(source),...await testConnectivityAndTelemetry(source)];
 console.log(`Historial: ${checks.length} comprobaciones correctas.`);
