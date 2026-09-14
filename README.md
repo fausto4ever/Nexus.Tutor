@@ -25,6 +25,9 @@ Nexus.Tutor es el laboratorio móvil del tutor para probar cercanía y el flujo 
 La configuración conserva una lista de destinos. El destino original se migra automáticamente como `primary` y puede añadirse un segundo destino —o más— sin borrar el anterior.
 
 - El destino guardado se selecciona desde **Configuración**.
+- **Añadir destino** abre un borrador limpio y el botón fijo de la parte inferior cambia a **Guardar nuevo destino**.
+- Mientras se crea un destino aparece **Cancelar nuevo destino**, que restaura el destino activo sin guardar el borrador.
+- La barra de acciones permanece visible al desplazarse dentro de Configuración para evitar que el usuario pierda el botón Guardar.
 - Al guardar un destino distinto, pasa a ser el destino activo y la distancia se recalcula contra sus coordenadas.
 - La distancia previa se invalida al cambiar de destino para evitar mostrar un metraje correspondiente a otro punto.
 - Durante un trayecto activo se bloquea cambiar o editar el destino para evitar modificar el objetivo a mitad del recorrido.
@@ -60,7 +63,7 @@ Con los valores por defecto (`WAITING=1000`, `READY=100`, `AT_GATE=20`):
 - 20 m: 98%.
 - 0 m: 100%.
 
-Los marcadores WAITING, READY y AT_GATE se colocan matemáticamente sobre esa misma escala y no en columnas de igual tamaño.
+Los marcadores WAITING, READY y AT_GATE se colocan matemáticamente sobre esa misma escala. READY y AT_GATE se muestran en renglones distintos y cada etiqueta apunta mediante una guía a su posición exacta para evitar superposición visual.
 
 ## GPS al volver a la app
 
@@ -103,7 +106,7 @@ Incluye manifest y service worker. La geolocalización del navegador requiere co
 - La ruta en auto envía las coordenadas actuales y del destino a OSRM por internet; si falla, se usa distancia directa. No se guarda la ruta ni se envía información al Gateway.
 - Volver a la app no reconstruye posiciones del tiempo que estuvo suspendida.
 
-## Versión 0.1.6
+## Versión 0.1.7
 
 - Activación anticipada desde cualquier distancia.
 - Halos OUTSIDE rojo, WAITING naranja, READY azul y AT_GATE verde.
@@ -111,9 +114,11 @@ Incluye manifest y service worker. La geolocalización del navegador requiere co
 - Progresión monotónica y restauración de estado.
 - Conservación de última distancia durante recálculo/pérdida de GPS.
 - Polling adaptativo 60/30/10 s.
-- Escala lineal de proximidad y marcadores proporcionales.
+- Escala lineal de proximidad con marcadores proporcionales separados visualmente.
 - Indicador de conexión a internet.
 - AT_GATE como espera de entrega y soporte preparado para COMPLETED.
 - Telemetría local descargable en JSON.
 - Múltiples destinos de prueba sin sobrescribir el destino principal.
-- 72 comprobaciones automatizadas de lógica, GPS, DOM, persistencia, polling, conectividad, escala, telemetría y destinos.
+- Guardado de destino visible y persistente con opción de cancelar borrador.
+- Caché del service worker renovada para evitar mezclar recursos de 0.1.6.
+- 77 comprobaciones automatizadas de lógica, GPS, DOM, persistencia, polling, conectividad, escala, telemetría y destinos.
