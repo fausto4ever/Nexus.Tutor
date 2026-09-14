@@ -12,6 +12,7 @@
   let manualDistanceEnabled=false;
   let manualDistance=Math.max(0,Number(config.thresholds?.waitingMeters)||1000);
   let refreshTimer=null,countdownTimer=null,nextRefreshAt=null;
+  let resumeRun=null,lastResumeAt=-Infinity,measurementRevision=0;
 
   const els={
     schoolName:$('#schoolName'),schoolLock:$('#schoolLock'),schoolCoords:$('#schoolCoords'),distanceValue:$('#distanceValue'),distanceUnit:$('#distanceUnit'),accuracyValue:$('#accuracyValue'),distanceSource:$('#distanceSource'),distanceProgress:$('#distanceProgress'),waitingLabel:$('#waitingLabel'),readyLabel:$('#readyLabel'),gateLabel:$('#gateLabel'),statusPill:$('#statusPill'),statusMessage:$('#statusMessage'),countdown:$('#countdown'),lastUpdate:$('#lastUpdate'),pickupBtn:$('#pickupBtn'),pickupBtnText:$('#pickupBtnText'),actionHint:$('#actionHint'),resetJourneyBtn:$('#resetJourneyBtn'),eventLog:$('#eventLog'),settingsDialog:$('#settingsDialog'),settingsBtn:$('#settingsBtn'),cfgSchoolName:$('#cfgSchoolName'),cfgLat:$('#cfgLat'),cfgLng:$('#cfgLng'),cfgWaiting:$('#cfgWaiting'),cfgReady:$('#cfgReady'),cfgGate:$('#cfgGate'),cfgDistanceMode:$('#cfgDistanceMode'),useCurrentAsSchoolBtn:$('#useCurrentAsSchoolBtn'),saveSettingsBtn:$('#saveSettingsBtn'),settingsError:$('#settingsError'),clearLogBtn:$('#clearLogBtn'),manualDistanceToggle:$('#manualDistanceToggle'),manualDistanceControls:$('#manualDistanceControls'),manualDistanceInput:$('#manualDistanceInput'),manualDistanceMinus:$('#manualDistanceMinus'),manualDistancePlus:$('#manualDistancePlus'),manualDistanceStep:$('#manualDistanceStep')
@@ -50,7 +51,7 @@
   }
   function applyManualDistance(value){
     if(!Number.isSafeInteger(value)||value<0)return;
-    manualDistance=value;els.manualDistanceInput.value=String(value);
+    measurementRevision++;manualDistance=value;els.manualDistanceInput.value=String(value);
     if(!manualDistanceEnabled){syncManualControls();return;}
     latestDistance=value;latestSource='manual';journey.lastCheckedAt=new Date().toISOString();saveJourney();
     if(journey.active)promoteStatus(candidateStatus(value),value);
@@ -80,23 +81,23 @@
   }
   function candidateStatus(distance){const t=config.thresholds;if(distance<=Number(t.atGateMeters))return'AT_GATE';if(distance<=Number(t.readyMeters))return'READY';if(distance<=Number(t.waitingMeters))return'WAITING';return'OUTSIDE';}
   function promoteStatus(candidate,distance){if(!journey.active)return;const current=journey.status||'WAITING';if((STATUS_RANK[candidate]||0)>(STATUS_RANK[current]||0)){journey.status=candidate;saveJourney();addLog(candidate,manualDistanceEnabled?'Avance por simulación manual':'Avance automático',distance);}}
-  async function refreshMeasurement({allowPromotion=true,recordMeasurement=false}={}){
-    const measuredJourney=journey;
+  async function refreshMeasurement({allowPromotion=true,recordMeasurement=false,measurementReason='Medición periódica'}={}){
+    const measuredJourney=journey,revision=++measurementRevision;
     try{
       const result=await measureDistance();
-      if(journey!==measuredJourney)return;
+      if(journey!==measuredJourney||revision!==measurementRevision)return;
       latestDistance=result.meters;latestSource=result.source;
       journey.lastCheckedAt=new Date().toISOString();saveJourney();
       if(allowPromotion&&journey.active)promoteStatus(candidateStatus(latestDistance),latestDistance);
       if(recordMeasurement&&journey.active){
         const sourceLabel={manual:'simulación manual',direct:'GPS · distancia directa',driving:'ruta en auto','direct-fallback':'ruta no disponible · distancia directa'};
-        addLog(journey.status,`Medición periódica · ${sourceLabel[result.source]||result.source}`,latestDistance);
+        addLog(journey.status,`${measurementReason} · ${sourceLabel[result.source]||result.source}`,latestDistance);
       }
       render();
     }catch(err){
-      if(journey!==measuredJourney)return;
+      if(journey!==measuredJourney||revision!==measurementRevision)return;
       console.warn(err);
-      if(recordMeasurement&&journey.active)addLog(journey.status,'Medición periódica no disponible',null);
+      if(recordMeasurement&&journey.active)addLog(journey.status,`${measurementReason} no disponible`,null);
       render();
     }
   }
@@ -132,10 +133,44 @@
     config={...config,school:{name:els.cfgSchoolName.value.trim()||'Escuela',lat,lng},thresholds:{waitingMeters:waiting,readyMeters:ready,atGateMeters:gate},distanceMode:els.cfgDistanceMode.value};saveConfig();els.settingsDialog.close();latestDistance=null;render();if((currentPosition||manualDistanceEnabled)&&schoolReady())refreshMeasurement({allowPromotion:journey.active});
   }
   function useCurrentAsSchool(){if(!currentPosition){els.settingsError.textContent='Todavía no hay una lectura GPS disponible.';els.settingsError.classList.remove('hidden');return;}els.cfgLat.value=currentPosition.coords.latitude;els.cfgLng.value=currentPosition.coords.longitude;els.settingsError.classList.add('hidden');}
-  function setManualDistanceEnabled(enabled){manualDistanceEnabled=Boolean(enabled);if(manualDistanceEnabled){syncManualControls();latestDistance=manualDistance;latestSource='manual';journey.lastCheckedAt=new Date().toISOString();saveJourney();if(journey.active)promoteStatus(candidateStatus(latestDistance),latestDistance);render();}else{latestDistance=null;latestSource='direct';render();if(currentPosition&&schoolReady())refreshMeasurement({allowPromotion:journey.active});}}
-  function watchGps(){if(!('geolocation'in navigator)){els.actionHint.textContent='Este navegador no ofrece geolocalización.';return;}navigator.geolocation.watchPosition(pos=>{currentPosition=pos;render();if(schoolReady()&&!journey.active&&!manualDistanceEnabled)refreshMeasurement({allowPromotion:false});},err=>{console.warn(err);if(!manualDistanceEnabled)els.actionHint.textContent='No se pudo obtener GPS. Revisa permisos de ubicación.';render();},{enableHighAccuracy:true,maximumAge:5000,timeout:15000});}
+  function setManualDistanceEnabled(enabled){measurementRevision++;manualDistanceEnabled=Boolean(enabled);if(manualDistanceEnabled){syncManualControls();latestDistance=manualDistance;latestSource='manual';journey.lastCheckedAt=new Date().toISOString();saveJourney();if(journey.active)promoteStatus(candidateStatus(latestDistance),latestDistance);render();}else{latestDistance=null;latestSource='direct';render();if(currentPosition&&schoolReady())refreshMeasurement({allowPromotion:journey.active});}}
+  function watchGps(){if(!('geolocation'in navigator)){els.actionHint.textContent='Este navegador no ofrece geolocalización.';return;}navigator.geolocation.watchPosition(pos=>{currentPosition=pos;render();if(!resumeRun&&schoolReady()&&!journey.active&&!manualDistanceEnabled)refreshMeasurement({allowPromotion:false});},err=>{console.warn(err);if(!manualDistanceEnabled)els.actionHint.textContent='No se pudo obtener GPS. Revisa permisos de ubicación.';render();},{enableHighAccuracy:true,maximumAge:5000,timeout:15000});}
+  async function refreshOnReturn(){
+    if(document.visibilityState==='hidden'||resumeRun||Date.now()-lastResumeAt<2000||!schoolReady())return;
+    const run={journey,manual:manualDistanceEnabled};
+    resumeRun=run;lastResumeAt=Date.now();measurementRevision++;stopRefreshLoop();
+    const isCurrent=()=>resumeRun===run&&journey===run.journey&&manualDistanceEnabled===run.manual&&document.visibilityState!=='hidden';
+    try{
+      if(!run.manual){
+        currentPosition=null;latestDistance=null;render();
+        els.actionHint.textContent='Actualizando ubicación…';
+        if(!('geolocation'in navigator))throw new Error('GPS_NOT_AVAILABLE');
+        const pos=await new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:true,maximumAge:0,timeout:15000}));
+        if(!isCurrent())return;
+        currentPosition=pos;
+      }
+      if(!isCurrent())return;
+      await refreshMeasurement({allowPromotion:true,recordMeasurement:true,measurementReason:'Medición al volver a la app'});
+    }catch(err){
+      if(!isCurrent())return;
+      console.warn(err);currentPosition=null;latestDistance=null;render();
+      els.actionHint.textContent='No se pudo actualizar la ubicación. Revisa señal y permisos.';
+      if(journey.active)addLog(journey.status,'Medición al volver a la app no disponible',null);
+    }finally{
+      if(resumeRun===run){
+        resumeRun=null;
+        if(journey.active&&document.visibilityState!=='hidden')startRefreshLoop();
+      }
+    }
+  }
+  function onVisibilityChange(){
+    if(document.visibilityState==='hidden'){
+      resumeRun=null;lastResumeAt=-Infinity;measurementRevision++;stopRefreshLoop();
+    }else return refreshOnReturn();
+  }
   function installSw(){if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(console.warn);}
 
   els.settingsBtn.addEventListener('click',openSettings);els.saveSettingsBtn.addEventListener('click',saveSettingsFromForm);els.useCurrentAsSchoolBtn.addEventListener('click',useCurrentAsSchool);els.pickupBtn.addEventListener('click',startJourney);els.resetJourneyBtn.addEventListener('click',resetJourney);els.clearLogBtn.addEventListener('click',()=>{saveLog([]);renderLog();});els.manualDistanceToggle.addEventListener('change',e=>setManualDistanceEnabled(e.target.checked));els.manualDistanceInput.addEventListener('change',onManualDistanceChange);els.manualDistanceMinus.addEventListener('click',()=>adjustManualDistance(-1));els.manualDistancePlus.addEventListener('click',()=>adjustManualDistance(1));els.manualDistanceStep.addEventListener('change',syncManualControls);
-  syncManualControls();renderLog();render();watchGps();installSw();if(journey.active)startRefreshLoop();
+  window.addEventListener('focus',refreshOnReturn);window.addEventListener('pageshow',event=>{if(event.persisted)return refreshOnReturn();});document.addEventListener('visibilitychange',onVisibilityChange);
+  syncManualControls();renderLog();render();watchGps();installSw();if(journey.active&&document.visibilityState!=='hidden')startRefreshLoop();
 })();
