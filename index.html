@@ -47,6 +47,22 @@
       </div>
     </section>
 
+    <section class="sim-card card">
+      <div class="section-title">
+        <div>
+          <span class="muted">LABORATORIO</span>
+          <strong>Simulador de cercanía</strong>
+        </div>
+        <label class="sim-toggle"><input id="manualDistanceToggle" type="checkbox"> <span>Manual</span></label>
+      </div>
+      <div id="manualDistanceControls" class="manual-distance-controls hidden">
+        <div class="manual-distance-readout"><strong id="manualDistanceValue">1000</strong><span>m</span></div>
+        <input id="manualDistanceSlider" class="distance-slider" type="range" min="0" max="1500" step="1" value="1000" aria-label="Distancia manual en metros">
+        <div class="slider-scale"><span>0 m</span><span id="manualDistanceMaxLabel">1500 m</span></div>
+        <p class="helper">Mueve el control para simular que te acercas a la escuela. Mientras esté activo, esta distancia sustituye temporalmente al GPS.</p>
+      </div>
+    </section>
+
     <section class="status-card card">
       <span class="muted">Estado de prueba</span>
       <div id="statusPill" class="status-pill status-outside">FUERA DEL UMBRAL</div>
@@ -95,12 +111,13 @@
 
       <div class="grid2">
         <label>Latitud
-          <input id="cfgLat" type="number" step="any" placeholder="19.000000">
+          <input id="cfgLat" type="text" inputmode="decimal" autocomplete="off" placeholder="19.000000">
         </label>
         <label>Longitud
-          <input id="cfgLng" type="number" step="any" placeholder="-101.000000">
+          <input id="cfgLng" type="text" inputmode="decimal" autocomplete="off" placeholder="-101.000000">
         </label>
       </div>
+      <p class="helper">Puedes escribir coordenadas positivas o negativas. También se acepta coma decimal.</p>
 
       <button id="useCurrentAsSchoolBtn" type="button" class="secondary-btn">Usar mi ubicación actual como escuela</button>
 
