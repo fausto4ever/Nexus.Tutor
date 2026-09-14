@@ -1,98 +1,102 @@
 # Nexus.Tutor
 
-PWA de laboratorio para probar físicamente la lógica de distancia de recogida antes de conectarla al Gateway.
+Nexus.Tutor es el laboratorio móvil del tutor para probar cercanía y el flujo «Voy por mi hijo» antes de conectarlo al Gateway de Control de Acceso.
 
-## Versión inicial 0.1.0
+## Flujo actual
 
-La aplicación funciona completamente en el navegador y **no escribe nada en Control de Acceso Gateway**.
-
-### Flujo
-
-1. Fijar la ubicación de la escuela desde Configuración. Puede introducirse latitud/longitud manualmente o utilizar la posición GPS actual como punto fijo.
-2. Configurar los tres umbrales locales:
-   - WAITING
-   - READY
-   - AT GATE
+1. Configurar la ubicación fija de la escuela.
+2. Obtener una medición válida por GPS/ruta o activar el simulador manual.
 3. Elegir el método de distancia:
    - Línea recta mediante GPS/Haversine.
    - Ruta en automóvil mediante el servidor público de OSRM, solo para laboratorio.
 4. Con escuela configurada y una distancia válida se habilita **VOY POR MI HIJO**, sin límite de kilometraje.
 5. Al pulsarlo fuera del radio comienza una prueba local en OUTSIDE; al entrar al rango operativo avanza a WAITING. Dentro del rango comienza en WAITING y evalúa READY/AT_GATE.
-6. Nexus.Tutor vuelve a medir cada 30 segundos.
-7. La progresión es monotónica: `OUTSIDE -> WAITING -> READY -> AT_GATE`. El GPS no hace retroceder el estado si una lectura posterior fluctúa.
-8. Se conserva un historial local de los cambios de estado y de cada medición periódica, aunque el estado o la distancia no cambien.
+6. Nexus.Tutor adapta la frecuencia de medición conforme se acerca: OUTSIDE 60 s, WAITING 30 s, READY 10 s y AT_GATE mantiene 10 s.
+7. La progresión es monotónica: `OUTSIDE -> WAITING -> READY -> AT_GATE -> COMPLETED`. El GPS no hace retroceder el estado si una lectura posterior fluctúa.
+8. AT_GATE muestra **Has llegado · Esperando la entrega**. COMPLETED queda preparado para la futura confirmación de Nexus.Access/Gateway y muestra el cierre del trayecto.
+9. Se conserva un historial local de los cambios de estado y de cada medición periódica.
 
 ## Privacidad del laboratorio
 
-- No se guarda una ruta histórica.
-- No se envían coordenadas ni estados al Gateway.
-- Configuración, prueba actual e historial se almacenan en `localStorage` del dispositivo.
-- La ubicación GPS se utiliza en el navegador para calcular distancia.
+La prueba funciona localmente en el navegador. Todavía no envía solicitudes de entrega al colegio ni al Gateway.
 
-## Distancia por ruta
+La telemetría de diagnóstico se conserva en el dispositivo y sólo se exporta cuando el usuario pulsa **Descargar JSON**. El JSON puede incluir coordenadas, precisión, distancia, conectividad, visibilidad de la app y eventos GPS para reconstruir una prueba real.
 
-El modo de ruta en auto usa `router.project-osrm.org` como servicio de prueba. No debe considerarse infraestructura de producción. Si la consulta falla, la PWA vuelve automáticamente a distancia directa y lo indica en pantalla.
+## Estados de cercanía
 
-Para producción se deberá elegir un proveedor y arquitectura definitivos. Google Routes requiere credenciales/facturación y una API key no debe quedar expuesta sin control en un repositorio público. Waze pertenece a Google, pero no ofrece un endpoint público general equivalente pensado para calcular libremente distancia de ruta desde una PWA.
+- **OUTSIDE**: trayecto iniciado fuera del rango operativo.
+- **WAITING**: dentro del rango WAITING configurado.
+- **READY**: dentro del rango READY.
+- **AT_GATE**: punto de recogida alcanzado; queda esperando la entrega.
+- **COMPLETED**: entrega confirmada; finaliza el seguimiento de proximidad.
 
-## PWA
+La progresión de estado es monotónica durante un trayecto activo. La distancia visible, en cambio, siempre representa la medición real o la última conocida.
 
-Incluye manifest y service worker. La geolocalización del navegador requiere contexto seguro (`https://` o localhost). Para las pruebas físicas debe publicarse el repositorio en un origen HTTPS, por ejemplo GitHub Pages o Cloudflare Pages.
+## Escala de distancia
 
-## Pendiente después de las pruebas
+La barra horizontal es una representación lineal del rango operativo completo: WAITING es el límite máximo y 0 m es el 100% del recorrido visual.
 
-- Fijar coordenadas definitivas de la escuela.
-- Ajustar umbrales a partir de las mediciones reales.
-- Comparar distancia directa contra distancia por ruta.
-- Evaluar fluctuación/precisión GPS junto con cada lectura.
-- Decidir proveedor de ruteo para producción, si realmente aporta valor frente a distancia directa.
-- Conectar posteriormente Nexus.Tutor con Gateway para crear solicitudes reales y recibir estados canonicos.
+Con los valores por defecto (`WAITING=1000`, `READY=100`, `AT_GATE=20`):
 
-## Corrección 0.1.3: historial periódico
+- 1500 m o más: 0% (fuera de la escala operativa).
+- 1000 m: 0%.
+- 500 m: 50%.
+- 300 m: 70%.
+- 100 m: 90%.
+- 20 m: 98%.
+- 0 m: 100%.
 
-- Durante una prueba activa, cada ciclo de 30 segundos agrega una medición al historial con hora, estado, distancia y método usado, también en el simulador manual.
-- Los cambios de estado siguen registrándose inmediatamente como eventos separados. El registro periódico continúa en AT_GATE hasta reiniciar la prueba.
-- Si no se puede medir, el ciclo registra “Medición periódica no disponible”, sin reutilizar una distancia anterior como si fuera nueva.
-- Reiniciar detiene el registro periódico. Se descartan las mediciones pendientes de una prueba anterior.
-- Se conserva el límite existente de los últimos 60 eventos en localStorage.
-- La prueba debe mantenerse abierta en primer plano; no se reconstruyen mediciones de intervalos suspendidos por el navegador.
-- CSS y JavaScript permanecen en archivos externos cargados mediante link y script src.
+Los marcadores WAITING, READY y AT_GATE se colocan matemáticamente sobre esa misma escala y no en columnas de igual tamaño.
 
-## Versionado de producción
+## GPS al volver a la app
 
-- package.json, config.js, la versión visible y la caché del service worker deben coincidir; el build falla si detecta diferencias.
-- El build agrega la versión de package.json a las referencias externas de JS y CSS, por ejemplo app.min.js?v=0.1.3.
-- El service worker precarga esas mismas URLs versionadas.
-- Se mantiene el build minificado y ofuscado, sin sourcemaps ni JS/CSS inline.
-- El workflow valida pruebas y build en pull requests; al publicar en main también actualiza dist/.
+Al pasar la app a segundo plano se detienen los temporizadores periódicos. Al volver:
 
-## Preparado 0.1.4: simulación con + y −
+- se conserva visible la última distancia válida;
+- se marca como **Recalculando ubicación…**;
+- se solicita una lectura GPS fresca con `maximumAge: 0`;
+- una lectura antigua no puede iniciar un nuevo trayecto ni promover estados;
+- si falla el GPS, se conserva la última distancia visible como **Última ubicación conocida** y el estado ya alcanzado no retrocede;
+- al recuperarse el GPS se recalcula inmediatamente.
 
-- El slider se sustituye por botones + y − y un campo editable de distancia en metros enteros.
-- Cada pulsación cambia 10 m de forma predeterminada. Se puede elegir 1 m, 10 m, 100 m o 1 km.
-- La distancia puede superar el umbral WAITING para simular una ruta alterna; no se permite una distancia negativa.
-- Los cambios válidos se aplican al pulsar un botón o confirmar/salir del campo. No se evalúan números incompletos mientras se escribe.
-- Durante una prueba activa el estado solo avanza: WAITING → READY → AT_GATE. Al cruzar un umbral se actualizan la vista y el historial inmediatamente.
-- Aumentar la distancia conserva el estado alcanzado, incluso fuera de WAITING. Los registros periódicos siguen guardando cada 30 s el estado conservado y la distancia actual.
-- Antes de iniciar una prueba, la vista muestra la proximidad actual y el botón solo se habilita dentro de WAITING. Reiniciar permite comenzar una prueba nueva.
+## Conectividad
 
-## Preparado 0.1.5: recálculo al volver a la aplicación
+La interfaz muestra un indicador **En línea / Sin internet** mediante los eventos de conectividad del navegador. Este indicador describe disponibilidad de red; no equivale todavía a una comprobación de salud del Gateway.
 
-- Al recuperar focus, volver a estar visible o restaurarse desde la caché de navegación, se recalcula sin esperar el siguiente intervalo.
-- En modo GPS se pide una posición nueva con getCurrentPosition, alta precisión, maximumAge: 0 y timeout de 15 s. En modo manual se usa la distancia simulada.
-- Se agrupan eventos de regreso próximos para evitar mediciones duplicadas; al ocultarse se pausa el temporizador local.
-- Las pruebas activas registran “Medición al volver a la app”, además de cualquier avance de estado, y después reinician el ciclo de 30 s.
-- Si falla la ubicación, se registra la falta de medición sin promover estados ni usar una distancia vieja. Se descartan respuestas de una prueba, modo o regreso anterior.
+## Telemetría JSON
+
+Nexus.Tutor mantiene una bitácora local de diagnóstico con hasta 1000 eventos. Entre otros registra:
+
+- inicio, reinicio y finalización del trayecto;
+- cambios OUTSIDE/WAITING/READY/AT_GATE/COMPLETED;
+- distancia, precisión, fuente y estado de frescura de la medición;
+- coordenadas cuando están disponibles;
+- APP_HIDDEN / APP_RESUME;
+- GPS_RECALCULATING / errores / recuperación;
+- cambios de conectividad;
+- cambios de frecuencia de polling.
+
+La descarga se genera como `nexus-tutor-telemetry-<fecha>.json`.
+
+## Build de producción
+
+El build de producción versiona los assets, minifica y ofusca JavaScript, minifica CSS/HTML y no genera sourcemaps. El workflow ejecuta pruebas, build y validación de `dist` antes de integrar.
+
+Incluye manifest y service worker. La geolocalización del navegador requiere contexto seguro (HTTPS o localhost).
+
 - La distancia directa se calcula localmente mediante Haversine. El navegador obtiene la ubicación del dispositivo, cuya disponibilidad offline depende del dispositivo y su proveedor de ubicación.
 - La ruta en auto envía las coordenadas actuales y del destino a OSRM por internet; si falla, se usa distancia directa. No se guarda la ruta ni se envía información al Gateway.
 - Volver a la app no reconstruye posiciones del tiempo que estuvo suspendida.
 
-## Versión 0.1.6: activación anticipada y halo de estado
+## Versión 0.1.6
 
-- Se permite iniciar desde cualquier distancia, manteniendo como requisitos la escuela configurada y una medición válida (GPS/ruta o manual).
-- OUTSIDE activo significa trayecto iniciado antes de entrar al rango operativo; revisa cada 30 s y al volver a la app. No equivale a una solicitud recibida por el colegio.
-- El halo permanece visible: rojo OUTSIDE, naranja WAITING, azul READY y verde AT_GATE. Cada color se acompaña de texto; no parpadea.
-- Al cruzar un umbral, estado, halo e historial cambian con la medición. Aumentar la distancia no reduce el estado ni el halo alcanzado.
-- Reiniciar elimina el halo activo y permite iniciar otro trayecto. Se conservan el historial periódico y la restauración de prueba.
-- La falta de ubicación se comunica por separado, conservando el último estado; no se presenta como fuera de rango ni como confirmación del colegio.
-- CSS y JS externos, versiones sincronizadas y build de producción ofuscado/minificado sin sourcemaps.
+- Activación anticipada desde cualquier distancia.
+- Halos OUTSIDE rojo, WAITING naranja, READY azul y AT_GATE verde.
+- Progresión monotónica y restauración de estado.
+- Conservación de última distancia durante recálculo/pérdida de GPS.
+- Polling adaptativo 60/30/10 s.
+- Escala lineal de proximidad y marcadores proporcionales.
+- Indicador de conexión a internet.
+- AT_GATE como espera de entrega y soporte preparado para COMPLETED.
+- Telemetría local descargable en JSON.
+- 58 comprobaciones automatizadas de lógica, GPS, DOM, persistencia, polling, conectividad, escala y telemetría.
