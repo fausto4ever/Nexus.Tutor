@@ -47,6 +47,7 @@ async function buildJs(input,output){
 
 await buildJs('config.js','config.min.js');
 await buildJs('app.js','app.min.js');
+await buildJs('coordinates.js','coordinates.min.js');
 
 const css=await read('styles.css');
 const cssOut=new CleanCSS({level:2,sourceMap:false}).minify(css);
@@ -57,7 +58,8 @@ let html=await read('index.html');
 html=html
   .replace('href="styles.css"','href="styles.min.css"')
   .replace('src="config.js"','src="config.min.js"')
-  .replace('src="app.js"','src="app.min.js"');
+  .replace('src="app.js"','src="app.min.js"')
+  .replace('src="coordinates.js"','src="coordinates.min.js"');
 html=await minifyHtml(html,{
   collapseWhitespace:true,
   removeComments:true,
@@ -74,7 +76,8 @@ const swSource=await read('sw.js');
 const swProd=swSource
   .replace("'./styles.css'","'./styles.min.css'")
   .replace("'./config.js'","'./config.min.js'")
-  .replace("'./app.js'","'./app.min.js'");
+  .replace("'./app.js'","'./app.min.js'")
+  .replace("'./coordinates.js'","'./coordinates.min.js'");
 const swMinified=await minifyJs(swProd,{
   compress:{passes:2},
   mangle:true,
@@ -89,7 +92,7 @@ await fs.copyFile(path.join(root,'icon.svg'),path.join(dist,'icon.svg'));
 
 const files=await fs.readdir(dist);
 if(files.some(name=>name.endsWith('.map')))throw new Error('El build contiene sourcemaps');
-if(files.some(name=>['app.js','config.js','styles.css'].includes(name)))throw new Error('El build contiene archivos fuente sin minificar');
+if(files.some(name=>['app.js','config.js','coordinates.js','styles.css'].includes(name)))throw new Error('El build contiene archivos fuente sin minificar');
 
 console.log('Nexus.Tutor production build generado en dist/');
 console.log(files.sort().join('\n'));
