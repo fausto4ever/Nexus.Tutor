@@ -14,7 +14,7 @@
   let refreshTimer=null,countdownTimer=null,nextRefreshAt=null;
 
   const els={
-    schoolName:$('#schoolName'),schoolLock:$('#schoolLock'),schoolCoords:$('#schoolCoords'),distanceValue:$('#distanceValue'),distanceUnit:$('#distanceUnit'),accuracyValue:$('#accuracyValue'),distanceSource:$('#distanceSource'),distanceProgress:$('#distanceProgress'),waitingLabel:$('#waitingLabel'),readyLabel:$('#readyLabel'),gateLabel:$('#gateLabel'),statusPill:$('#statusPill'),statusMessage:$('#statusMessage'),countdown:$('#countdown'),lastUpdate:$('#lastUpdate'),pickupBtn:$('#pickupBtn'),pickupBtnText:$('#pickupBtnText'),actionHint:$('#actionHint'),resetJourneyBtn:$('#resetJourneyBtn'),eventLog:$('#eventLog'),settingsDialog:$('#settingsDialog'),settingsBtn:$('#settingsBtn'),cfgSchoolName:$('#cfgSchoolName'),cfgLat:$('#cfgLat'),cfgLng:$('#cfgLng'),cfgWaiting:$('#cfgWaiting'),cfgReady:$('#cfgReady'),cfgGate:$('#cfgGate'),cfgDistanceMode:$('#cfgDistanceMode'),useCurrentAsSchoolBtn:$('#useCurrentAsSchoolBtn'),saveSettingsBtn:$('#saveSettingsBtn'),settingsError:$('#settingsError'),clearLogBtn:$('#clearLogBtn'),manualDistanceToggle:$('#manualDistanceToggle'),manualDistanceControls:$('#manualDistanceControls'),manualDistanceSlider:$('#manualDistanceSlider'),manualDistanceValue:$('#manualDistanceValue'),manualDistanceMaxLabel:$('#manualDistanceMaxLabel')
+    schoolName:$('#schoolName'),schoolLock:$('#schoolLock'),schoolCoords:$('#schoolCoords'),distanceValue:$('#distanceValue'),distanceUnit:$('#distanceUnit'),accuracyValue:$('#accuracyValue'),distanceSource:$('#distanceSource'),distanceProgress:$('#distanceProgress'),waitingLabel:$('#waitingLabel'),readyLabel:$('#readyLabel'),gateLabel:$('#gateLabel'),statusPill:$('#statusPill'),statusMessage:$('#statusMessage'),countdown:$('#countdown'),lastUpdate:$('#lastUpdate'),pickupBtn:$('#pickupBtn'),pickupBtnText:$('#pickupBtnText'),actionHint:$('#actionHint'),resetJourneyBtn:$('#resetJourneyBtn'),eventLog:$('#eventLog'),settingsDialog:$('#settingsDialog'),settingsBtn:$('#settingsBtn'),cfgSchoolName:$('#cfgSchoolName'),cfgLat:$('#cfgLat'),cfgLng:$('#cfgLng'),cfgWaiting:$('#cfgWaiting'),cfgReady:$('#cfgReady'),cfgGate:$('#cfgGate'),cfgDistanceMode:$('#cfgDistanceMode'),useCurrentAsSchoolBtn:$('#useCurrentAsSchoolBtn'),saveSettingsBtn:$('#saveSettingsBtn'),settingsError:$('#settingsError'),clearLogBtn:$('#clearLogBtn'),manualDistanceToggle:$('#manualDistanceToggle'),manualDistanceControls:$('#manualDistanceControls'),manualDistanceInput:$('#manualDistanceInput'),manualDistanceMinus:$('#manualDistanceMinus'),manualDistancePlus:$('#manualDistancePlus'),manualDistanceStep:$('#manualDistanceStep')
   };
 
   function clone(v){return JSON.parse(JSON.stringify(v));}
@@ -36,14 +36,34 @@
   function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
   function schoolReady(){return Number.isFinite(Number(config.school?.lat))&&Number.isFinite(Number(config.school?.lng));}
   function haversine(lat1,lon1,lat2,lon2){const R=6371000,toRad=v=>v*Math.PI/180;const p1=toRad(lat1),p2=toRad(lat2),dp=toRad(lat2-lat1),dl=toRad(lon2-lon1);const a=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
-  function manualSliderMax(){const waiting=Math.max(1,Number(config.thresholds?.waitingMeters)||1000);return Math.ceil(Math.max(waiting*1.25,waiting+500)/100)*100;}
-  function syncManualSlider(){
-    const max=manualSliderMax();
-    els.manualDistanceSlider.max=String(max);
-    manualDistance=Math.max(0,Math.min(max,Number(manualDistance)||0));
-    els.manualDistanceSlider.value=String(Math.round(manualDistance));
-    els.manualDistanceValue.textContent=String(Math.round(manualDistance));
-    els.manualDistanceMaxLabel.textContent=`${max} m`;
+  function manualStep(){const step=Number(els.manualDistanceStep.value);return[1,10,100,1000].includes(step)?step:10;}
+  function syncManualControls(){
+    if(document.activeElement!==els.manualDistanceInput)els.manualDistanceInput.value=String(manualDistance);
+    const step=manualStep();
+    els.manualDistanceMinus.disabled=manualDistance===0;
+    els.manualDistanceMinus.setAttribute('aria-label',`Restar ${step} metros`);
+    els.manualDistancePlus.setAttribute('aria-label',`Sumar ${step} metros`);
+  }
+  function parsedManualInput(){
+    const raw=els.manualDistanceInput.value.trim(),value=Number(raw);
+    return raw!==''&&Number.isSafeInteger(value)&&value>=0?value:null;
+  }
+  function applyManualDistance(value){
+    if(!Number.isSafeInteger(value)||value<0)return;
+    manualDistance=value;els.manualDistanceInput.value=String(value);
+    if(!manualDistanceEnabled){syncManualControls();return;}
+    latestDistance=value;latestSource='manual';journey.lastCheckedAt=new Date().toISOString();saveJourney();
+    if(journey.active)promoteStatus(candidateStatus(value),value);
+    render();
+  }
+  function onManualDistanceChange(){
+    const value=parsedManualInput();
+    if(value===null){els.manualDistanceInput.value=String(manualDistance);return;}
+    applyManualDistance(value);
+  }
+  function adjustManualDistance(direction){
+    const base=parsedManualInput()??manualDistance;
+    applyManualDistance(Math.min(Number.MAX_SAFE_INTEGER,Math.max(0,base+direction*manualStep())));
   }
   async function measureDistance(){
     if(!schoolReady())throw new Error('SCHOOL_NOT_READY');
@@ -87,11 +107,11 @@
     if(Number.isFinite(latestDistance)){if(latestDistance>=1000){els.distanceValue.textContent=(latestDistance/1000).toFixed(latestDistance>=10000?0:1);els.distanceUnit.textContent='km';}else{els.distanceValue.textContent=Math.round(latestDistance);els.distanceUnit.textContent='m';}const pct=Math.max(0,Math.min(100,100-(latestDistance/Math.max(1,Number(config.thresholds.waitingMeters))*100)));els.distanceProgress.style.width=`${pct}%`;}else{els.distanceValue.textContent='—';els.distanceUnit.textContent='m';els.distanceProgress.style.width='0%';}
     els.accuracyValue.textContent=manualDistanceEnabled?'Simulada':currentPosition?`±${Math.round(currentPosition.coords.accuracy||0)} m`:'—';
     els.distanceSource.textContent=latestSource==='manual'?'Distancia manual':latestSource==='driving'?'Ruta en auto':latestSource==='direct-fallback'?'Ruta no disponible · directa':'Distancia directa';
-    els.manualDistanceToggle.checked=manualDistanceEnabled;els.manualDistanceControls.classList.toggle('hidden',!manualDistanceEnabled);syncManualSlider();
+    els.manualDistanceToggle.checked=manualDistanceEnabled;els.manualDistanceControls.classList.toggle('hidden',!manualDistanceEnabled);syncManualControls();
     const raw=Number.isFinite(latestDistance)?candidateStatus(latestDistance):'OUTSIDE';const status=journey.active?journey.status:raw;
     const labels={OUTSIDE:'FUERA DEL UMBRAL',WAITING:'EN CAMINO · WAITING',READY:'PRÓXIMO · READY',AT_GATE:'EN LA PUERTA · AT GATE'};const classes={OUTSIDE:'status-outside',WAITING:'status-waiting',READY:'status-ready',AT_GATE:'status-gate'};
     els.statusPill.textContent=labels[status]||status;els.statusPill.className=`status-pill ${classes[status]||'status-outside'}`;
-    if(journey.active){els.statusMessage.textContent=status==='AT_GATE'?'Llegaste al umbral de puerta.':status==='READY'?'Ya estás dentro del umbral READY.':manualDistanceEnabled?'Solicitud local activa. Mueve el slider para simular que te acercas.':`Solicitud local activa. Se revisa la distancia cada ${config.refreshSeconds||30} segundos.`;els.pickupBtn.disabled=true;els.pickupBtn.classList.add('is-active');els.pickupBtnText.textContent=labels[status];els.resetJourneyBtn.classList.remove('hidden');els.actionHint.textContent='Prueba local: ningún estado se envía al Gateway.';}else{
+    if(journey.active){els.statusMessage.textContent=status==='AT_GATE'?'Alcanzaste AT_GATE. Se conserva aunque aumente la distancia.':status==='READY'?'Alcanzaste READY. Se conserva aunque aumente la distancia.':manualDistanceEnabled?'Solicitud local activa. Usa + y − para simular que te acercas o te alejas.':`Solicitud local activa. Se revisa la distancia cada ${config.refreshSeconds||30} segundos.`;els.pickupBtn.disabled=true;els.pickupBtn.classList.add('is-active');els.pickupBtnText.textContent=labels[status];els.resetJourneyBtn.classList.remove('hidden');els.actionHint.textContent='Prueba local: ningún estado se envía al Gateway.';}else{
       els.pickupBtn.classList.remove('is-active');els.resetJourneyBtn.classList.add('hidden');
       const hasDistance=Number.isFinite(latestDistance);const canStart=schoolReady()&&(manualDistanceEnabled||currentPosition)&&hasDistance&&latestDistance<=Number(config.thresholds.waitingMeters);
       els.pickupBtn.disabled=!canStart;els.pickupBtnText.textContent='VOY POR MI HIJO';els.actionHint.textContent=!schoolReady()?'Primero fija la ubicación de la escuela.':!manualDistanceEnabled&&!currentPosition?'Esperando ubicación GPS…':canStart?'Estás dentro del umbral WAITING. Puedes iniciar.':`Acércate a ${config.thresholds.waitingMeters} m o menos para habilitar el botón.`;els.statusMessage.textContent=canStart?'Estás dentro del radio WAITING.':'Acércate al radio WAITING para habilitar la solicitud.';
@@ -109,15 +129,13 @@
     const lat=parseCoordinate(els.cfgLat.value),lng=parseCoordinate(els.cfgLng.value),waiting=Number(els.cfgWaiting.value),ready=Number(els.cfgReady.value),gate=Number(els.cfgGate.value);
     const invalidCoord=(lat===null)!=(lng===null)||(lat!==null&&(!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180));
     if(invalidCoord||!Number.isFinite(waiting)||!Number.isFinite(ready)||!Number.isFinite(gate)||waiting<ready||ready<gate||gate<0){els.settingsError.textContent='Revisa coordenadas y umbrales: WAITING ≥ READY ≥ AT GATE ≥ 0.';els.settingsError.classList.remove('hidden');return;}
-    config={...config,school:{name:els.cfgSchoolName.value.trim()||'Escuela',lat,lng},thresholds:{waitingMeters:waiting,readyMeters:ready,atGateMeters:gate},distanceMode:els.cfgDistanceMode.value};saveConfig();manualDistance=Math.min(manualDistanceSliderMax(),Math.max(0,manualDistance));els.settingsDialog.close();latestDistance=null;render();if((currentPosition||manualDistanceEnabled)&&schoolReady())refreshMeasurement({allowPromotion:journey.active});
+    config={...config,school:{name:els.cfgSchoolName.value.trim()||'Escuela',lat,lng},thresholds:{waitingMeters:waiting,readyMeters:ready,atGateMeters:gate},distanceMode:els.cfgDistanceMode.value};saveConfig();els.settingsDialog.close();latestDistance=null;render();if((currentPosition||manualDistanceEnabled)&&schoolReady())refreshMeasurement({allowPromotion:journey.active});
   }
-  function manualDistanceSliderMax(){return manualSliderMax();}
   function useCurrentAsSchool(){if(!currentPosition){els.settingsError.textContent='Todavía no hay una lectura GPS disponible.';els.settingsError.classList.remove('hidden');return;}els.cfgLat.value=currentPosition.coords.latitude;els.cfgLng.value=currentPosition.coords.longitude;els.settingsError.classList.add('hidden');}
-  function setManualDistanceEnabled(enabled){manualDistanceEnabled=Boolean(enabled);if(manualDistanceEnabled){syncManualSlider();latestDistance=manualDistance;latestSource='manual';journey.lastCheckedAt=new Date().toISOString();saveJourney();if(journey.active)promoteStatus(candidateStatus(latestDistance),latestDistance);render();}else{latestDistance=null;latestSource='direct';render();if(currentPosition&&schoolReady())refreshMeasurement({allowPromotion:journey.active});}}
-  function onManualDistanceInput(){manualDistance=Number(els.manualDistanceSlider.value)||0;els.manualDistanceValue.textContent=String(Math.round(manualDistance));if(!manualDistanceEnabled)return;latestDistance=manualDistance;latestSource='manual';journey.lastCheckedAt=new Date().toISOString();saveJourney();if(journey.active)promoteStatus(candidateStatus(latestDistance),latestDistance);render();}
+  function setManualDistanceEnabled(enabled){manualDistanceEnabled=Boolean(enabled);if(manualDistanceEnabled){syncManualControls();latestDistance=manualDistance;latestSource='manual';journey.lastCheckedAt=new Date().toISOString();saveJourney();if(journey.active)promoteStatus(candidateStatus(latestDistance),latestDistance);render();}else{latestDistance=null;latestSource='direct';render();if(currentPosition&&schoolReady())refreshMeasurement({allowPromotion:journey.active});}}
   function watchGps(){if(!('geolocation'in navigator)){els.actionHint.textContent='Este navegador no ofrece geolocalización.';return;}navigator.geolocation.watchPosition(pos=>{currentPosition=pos;render();if(schoolReady()&&!journey.active&&!manualDistanceEnabled)refreshMeasurement({allowPromotion:false});},err=>{console.warn(err);if(!manualDistanceEnabled)els.actionHint.textContent='No se pudo obtener GPS. Revisa permisos de ubicación.';render();},{enableHighAccuracy:true,maximumAge:5000,timeout:15000});}
   function installSw(){if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(console.warn);}
 
-  els.settingsBtn.addEventListener('click',openSettings);els.saveSettingsBtn.addEventListener('click',saveSettingsFromForm);els.useCurrentAsSchoolBtn.addEventListener('click',useCurrentAsSchool);els.pickupBtn.addEventListener('click',startJourney);els.resetJourneyBtn.addEventListener('click',resetJourney);els.clearLogBtn.addEventListener('click',()=>{saveLog([]);renderLog();});els.manualDistanceToggle.addEventListener('change',e=>setManualDistanceEnabled(e.target.checked));els.manualDistanceSlider.addEventListener('input',onManualDistanceInput);
-  syncManualSlider();renderLog();render();watchGps();installSw();if(journey.active)startRefreshLoop();
+  els.settingsBtn.addEventListener('click',openSettings);els.saveSettingsBtn.addEventListener('click',saveSettingsFromForm);els.useCurrentAsSchoolBtn.addEventListener('click',useCurrentAsSchool);els.pickupBtn.addEventListener('click',startJourney);els.resetJourneyBtn.addEventListener('click',resetJourney);els.clearLogBtn.addEventListener('click',()=>{saveLog([]);renderLog();});els.manualDistanceToggle.addEventListener('change',e=>setManualDistanceEnabled(e.target.checked));els.manualDistanceInput.addEventListener('change',onManualDistanceChange);els.manualDistanceMinus.addEventListener('click',()=>adjustManualDistance(-1));els.manualDistancePlus.addEventListener('click',()=>adjustManualDistance(1));els.manualDistanceStep.addEventListener('change',syncManualControls);
+  syncManualControls();renderLog();render();watchGps();installSw();if(journey.active)startRefreshLoop();
 })();
