@@ -1,0 +1,14 @@
+{
+  "name":"Nexus.Tutor",
+  "short_name":"Nexus.Tutor",
+  "description":"PWA de laboratorio para pruebas de distancia y estados de recogida.",
+  "start_url":"./",
+  "scope":"./",
+  "display":"standalone",
+  "background_color":"#f4f7fb",
+  "theme_color":"#0f172a",
+  "orientation":"portrait-primary",
+  "icons":[
+    {"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+  ]
+}
