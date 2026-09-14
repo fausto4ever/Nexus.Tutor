@@ -4,23 +4,33 @@ Nexus.Tutor es el laboratorio móvil del tutor para probar cercanía y el flujo 
 
 ## Flujo actual
 
-1. Configurar la ubicación fija de la escuela.
+1. Configurar uno o más destinos de prueba y elegir el destino activo.
 2. Obtener una medición válida por GPS/ruta o activar el simulador manual.
 3. Elegir el método de distancia:
    - Línea recta mediante GPS/Haversine.
    - Ruta en automóvil mediante el servidor público de OSRM, solo para laboratorio.
-4. Con escuela configurada y una distancia válida se habilita **VOY POR MI HIJO**, sin límite de kilometraje.
+4. Con destino configurado y una distancia válida se habilita **VOY POR MI HIJO**, sin límite de kilometraje.
 5. Al pulsarlo fuera del radio comienza una prueba local en OUTSIDE; al entrar al rango operativo avanza a WAITING. Dentro del rango comienza en WAITING y evalúa READY/AT_GATE.
 6. Nexus.Tutor adapta la frecuencia de medición conforme se acerca: OUTSIDE 60 s, WAITING 30 s, READY 10 s y AT_GATE mantiene 10 s.
 7. La progresión es monotónica: `OUTSIDE -> WAITING -> READY -> AT_GATE -> COMPLETED`. El GPS no hace retroceder el estado si una lectura posterior fluctúa.
 8. AT_GATE muestra **Has llegado · Esperando la entrega**. COMPLETED queda preparado para la futura confirmación de Nexus.Access/Gateway y muestra el cierre del trayecto.
 9. Se conserva un historial local de los cambios de estado y de cada medición periódica.
 
+## Destinos de prueba
+
+La configuración conserva una lista de destinos. El destino original se migra automáticamente como `primary` y puede añadirse un segundo destino —o más— sin borrar el anterior.
+
+- El destino guardado se selecciona desde **Configuración**.
+- Al guardar un destino distinto, pasa a ser el destino activo y la distancia se recalcula contra sus coordenadas.
+- La distancia previa se invalida al cambiar de destino para evitar mostrar un metraje correspondiente a otro punto.
+- Durante un trayecto activo se bloquea cambiar o editar el destino para evitar modificar el objetivo a mitad del recorrido.
+- Cada cambio de destino queda identificado en telemetría con `destinationId` / `destinationName`, lo que permite segmentar el recorrido por destino.
+
 ## Privacidad del laboratorio
 
 La prueba funciona localmente en el navegador. Todavía no envía solicitudes de entrega al colegio ni al Gateway.
 
-La telemetría de diagnóstico se conserva en el dispositivo y sólo se exporta cuando el usuario pulsa **Descargar JSON**. El JSON puede incluir coordenadas, precisión, distancia, conectividad, visibilidad de la app y eventos GPS para reconstruir una prueba real.
+La telemetría de diagnóstico se conserva en el dispositivo y sólo se exporta cuando el usuario pulsa **Descargar JSON**. El JSON puede incluir coordenadas, precisión, distancia, conectividad, visibilidad de la app, destino activo y eventos GPS para reconstruir una prueba real.
 
 ## Estados de cercanía
 
@@ -68,6 +78,7 @@ La interfaz muestra un indicador **En línea / Sin internet** mediante los event
 Nexus.Tutor mantiene una bitácora local de diagnóstico con hasta 1000 eventos. Entre otros registra:
 
 - inicio, reinicio y finalización del trayecto;
+- cambios de destino con `destinationId` / `destinationName`;
 - cambios OUTSIDE/WAITING/READY/AT_GATE/COMPLETED;
 - distancia, precisión, fuente y estado de frescura de la medición;
 - coordenadas cuando están disponibles;
@@ -99,4 +110,5 @@ Incluye manifest y service worker. La geolocalización del navegador requiere co
 - Indicador de conexión a internet.
 - AT_GATE como espera de entrega y soporte preparado para COMPLETED.
 - Telemetría local descargable en JSON.
-- 58 comprobaciones automatizadas de lógica, GPS, DOM, persistencia, polling, conectividad, escala y telemetría.
+- Múltiples destinos de prueba sin sobrescribir el destino principal.
+- 72 comprobaciones automatizadas de lógica, GPS, DOM, persistencia, polling, conectividad, escala, telemetría y destinos.

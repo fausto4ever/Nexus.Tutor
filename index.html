@@ -32,11 +32,11 @@
           <span id="schoolLock" class="badge badge-warn">Sin fijar</span>
         </div>
       </div>
-      <div id="schoolCoords" class="coords">Configura la ubicación fija de la escuela.</div>
+      <div id="schoolCoords" class="coords">Configura la ubicación fija del destino.</div>
     </section>
 
     <section class="distance-card card">
-      <div class="distance-label">Distancia a la escuela</div>
+      <div class="distance-label">Distancia al destino</div>
       <div class="distance-value"><span id="distanceValue">—</span><span id="distanceUnit">m</span></div>
       <div class="distance-meta">
         <span>Precisión GPS <strong id="accuracyValue">—</strong></span>
@@ -122,7 +122,13 @@
         <button value="cancel" class="icon-btn" aria-label="Cerrar">✕</button>
       </div>
 
-      <label>Nombre de la escuela
+      <label>Destino guardado
+        <select id="cfgDestination" aria-describedby="destinationHelp"></select>
+      </label>
+      <button id="addDestinationBtn" type="button" class="secondary-btn">＋ Añadir destino</button>
+      <p id="destinationHelp" class="helper">Puedes conservar varios destinos de prueba. El destino activo se usa para calcular distancia y queda identificado en la telemetría JSON. No se puede cambiar durante un trayecto activo.</p>
+
+      <label>Nombre del destino
         <input id="cfgSchoolName" type="text" value="Instituto Ausbel">
       </label>
 
@@ -142,7 +148,7 @@
       </div>
       <p class="helper">Usa el botón − para poner o quitar el signo negativo. También puedes escribirlo directamente y se acepta coma decimal.</p>
 
-      <button id="useCurrentAsSchoolBtn" type="button" class="secondary-btn">Usar mi ubicación actual como escuela</button>
+      <button id="useCurrentAsSchoolBtn" type="button" class="secondary-btn">Usar mi ubicación actual como destino</button>
 
       <div class="divider"></div>
       <h3>Umbrales</h3>
@@ -177,6 +183,6 @@
 
   <script src="config.js"></script>
   <script src="app.js"></script>
-  <script src="coordinates.js"></script>
+  <script src="cordinates.js"></script>
 </body>
 </html>

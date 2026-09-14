@@ -3,7 +3,7 @@
   "version": "0.1.6",
   "private": true,
   "scripts": {
-    "test": "node scripts/test-history.mjs",
+    "test": "node scripts/test-history.mjs && node scripts/test-destinations.mjs",
     "build": "node scripts/build.mjs"
   },
   "dependencies": {
