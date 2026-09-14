@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 function createHarness(source, stored = new Map()) {
   const elements = new Map(), timers = new Map();
   let id = 0, clock = 0, gpsCallback;
+  const gpsRequests=[],windowListeners={},documentListeners={};
+  const document={visibilityState:'visible',querySelector:selector=>element(selector),addEventListener:(name,fn)=>{documentListeners[name]=fn;}};
   const defaults = {school:{name:'Escuela',lat:19,lng:-101},thresholds:{waitingMeters:1000,readyMeters:100,atGateMeters:20},distanceMode:'direct',refreshSeconds:30};
   const element = selector => {
     if (!elements.has(selector)) elements.set(selector, {value:'',disabled:false,textContent:'',innerHTML:'',style:{},classList:{add(){},remove(){},toggle(){}},listeners:{},setAttribute(name,value){this[name]=value;},addEventListener(name,fn){this.listeners[name]=fn;}});
@@ -10,14 +12,17 @@ function createHarness(source, stored = new Map()) {
   };
   class TestDate extends Date {constructor(...args){super(...(args.length?args:[1700000000000+clock]));}static now(){return 1700000000000+clock;}}
   const localStorage = {getItem:k=>stored.get(k)||null,setItem:(k,v)=>stored.set(k,v)};
-  const navigator = {geolocation:{watchPosition(fn){gpsCallback=fn;}}};
+  const navigator = {geolocation:{watchPosition(fn){gpsCallback=fn;},getCurrentPosition(success,error,options){gpsRequests.push({success,error,options});}}};
   new Function('window','document','navigator','localStorage','setInterval','clearInterval','Date','console','fetch',source)(
-    {NEXUS_TUTOR_DEFAULTS:defaults},{querySelector:element},navigator,localStorage,
+    {NEXUS_TUTOR_DEFAULTS:defaults,addEventListener:(name,fn)=>{windowListeners[name]=fn;}},document,navigator,localStorage,
     (fn,ms)=>{timers.set(++id,{fn,ms,next:clock+ms});return id;},key=>timers.delete(key),TestDate,{warn(){}},async()=>{throw Error('Route unavailable');}
   );
   const flush = async()=>{await Promise.resolve();await Promise.resolve();await Promise.resolve();};
   return {
-    stored, timers, element,
+    stored, timers, element, gpsRequests,
+    focus:()=>windowListeners.focus(),
+    visibility(state){document.visibilityState=state;return documentListeners.visibilitychange();},
+    pageshow:()=>windowListeners.pageshow({persisted:true}),
     logs:()=>JSON.parse(stored.get('nexusTutorLogV1')||'[]'),
     journey:()=>JSON.parse(stored.get('nexusTutorJourneyV1')||'null'),
     async event(selector,name,event={}){element(selector).listeners[name](event);await flush();},
@@ -132,6 +137,67 @@ async function testDistanceControls(source){
   return ['+/- WAITING boundary','Immediate READY UI and history','Alternative route retains READY','Periodic larger distance','Immediate AT_GATE UI and history','AT_GATE retained outside WAITING','Reload retains status','Invalid values rejected','Zero lower bound','Selectable step sizes','Reset allows WAITING again','GPS monotonic state'];
 }
 
+
+async function testReturnRefresh(source){
+  const h=createHarness(source);
+  await h.gps();
+  await h.event('#pickupBtn','click');
+  const count=h.logs().length;
+  h.visibility('hidden');
+  assert(h.timers.size===0,'Hidden page pauses intervals');
+  const pending=h.visibility('visible');
+  h.focus();
+  assert(h.gpsRequests.length===1,'Visibility and focus share one GPS request');
+  assert(h.gpsRequests[0].options.maximumAge===0&&h.gpsRequests[0].options.enableHighAccuracy===true,'Return requests fresh high-accuracy GPS');
+  assert(h.logs().length===count,'No stale reading is logged before GPS resolves');
+  h.gpsRequests[0].success({coords:{latitude:19,longitude:-101.0005,accuracy:5}});
+  await pending;
+  assert(h.journey().status==='READY'&&h.logs()[0].message.includes('volver'),'Fresh GPS promotes and logs immediately');
+  assert(h.timers.size===2,'Resume restores one measurement timer and countdown');
+  const resumedCount=h.logs().length;
+  await h.advance(29000);
+  assert(h.logs().length===resumedCount,'Next periodic check waits 30s after resume');
+  await h.advance(1000);
+  assert(h.logs().length===resumedCount+1,'Periodic logging resumes');
+
+  h.visibility('hidden');
+  const failed=h.visibility('visible');
+  h.gpsRequests[1].error({code:1,message:'Permission denied'});
+  await failed;
+  assert(h.logs()[0].distance===null&&h.logs()[0].message.includes('no disponible')&&h.journey().status==='READY','Failure records no distance and retains state');
+  assert(h.element('#distanceValue').textContent==='—','Failure does not display old distance as current');
+  h.visibility('hidden');
+  const obsolete=h.visibility('visible');
+  h.visibility('hidden');
+  const latest=h.visibility('visible');
+  h.gpsRequests[2].success({coords:{latitude:19,longitude:-101,accuracy:5}});
+  await obsolete;
+  assert(h.journey().status==='READY','Discard callback from a previous return');
+  h.gpsRequests[3].success({coords:{latitude:19,longitude:-101.05,accuracy:5}});
+  await latest;
+  assert(h.journey().status==='READY'&&h.logs()[0].distance>1000,'Current return respects monotonic status');
+
+  h.visibility('hidden');
+  const resetPending=h.visibility('visible');
+  await h.event('#resetJourneyBtn','click');
+  const resetCount=h.logs().length;
+  h.gpsRequests[4].success({coords:{latitude:19,longitude:-101,accuracy:5}});
+  await resetPending;
+  assert(!h.journey().active&&h.logs().length===resetCount&&h.timers.size===0,'Reset discards pending GPS and does not restart timer');
+
+  const manual=createHarness(source);
+  await manual.event('#manualDistanceToggle','change',{target:{checked:true}});
+  await manual.event('#pickupBtn','click');
+  manual.visibility('hidden');
+  await manual.visibility('visible');
+  await manual.focus();
+  assert(manual.gpsRequests.length===0&&manual.logs().length===2&&manual.logs()[0].distance===1000,'Manual resume recalculates once without GPS');
+  await manual.advance(3000);
+  await manual.pageshow();
+  assert(manual.logs().length===3,'Back-forward cache restoration refreshes');
+  return ['Hidden pauses timers','Focus/visibility deduplication','Fresh GPS required','Immediate resume transition/log','30s cadence restored','GPS failure without stale distance','Old callback ignored','Monotonic resume status','Reset during resume','Manual resume without GPS','pageshow restoration'];
+}
+
 const source=await fs.readFile(new URL('../app.js',import.meta.url),'utf8');
-const checks=[...await testHistory(source),...await testDistanceControls(source)];
+const checks=[...await testHistory(source),...await testDistanceControls(source),...await testReturnRefresh(source)];
 console.log(`Historial: ${checks.length} comprobaciones correctas.`);

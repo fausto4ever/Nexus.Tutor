@@ -75,3 +75,14 @@ Incluye manifest y service worker. La geolocalización del navegador requiere co
 - Durante una prueba activa el estado solo avanza: WAITING → READY → AT_GATE. Al cruzar un umbral se actualizan la vista y el historial inmediatamente.
 - Aumentar la distancia conserva el estado alcanzado, incluso fuera de WAITING. Los registros periódicos siguen guardando cada 30 s el estado conservado y la distancia actual.
 - Antes de iniciar una prueba, la vista muestra la proximidad actual y el botón solo se habilita dentro de WAITING. Reiniciar permite comenzar una prueba nueva.
+
+## Preparado 0.1.5: recálculo al volver a la aplicación
+
+- Al recuperar focus, volver a estar visible o restaurarse desde la caché de navegación, se recalcula sin esperar el siguiente intervalo.
+- En modo GPS se pide una posición nueva con getCurrentPosition, alta precisión, maximumAge: 0 y timeout de 15 s. En modo manual se usa la distancia simulada.
+- Se agrupan eventos de regreso próximos para evitar mediciones duplicadas; al ocultarse se pausa el temporizador local.
+- Las pruebas activas registran “Medición al volver a la app”, además de cualquier avance de estado, y después reinician el ciclo de 30 s.
+- Si falla la ubicación, se registra la falta de medición sin promover estados ni usar una distancia vieja. Se descartan respuestas de una prueba, modo o regreso anterior.
+- La distancia directa se calcula localmente mediante Haversine. El navegador obtiene la ubicación del dispositivo, cuya disponibilidad offline depende del dispositivo y su proveedor de ubicación.
+- La ruta en auto envía las coordenadas actuales y del destino a OSRM por internet; si falla, se usa distancia directa. No se guarda la ruta ni se envía información al Gateway.
+- Volver a la app no reconstruye posiciones del tiempo que estuvo suspendida.
