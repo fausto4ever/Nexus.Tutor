@@ -7,6 +7,7 @@
   const nameInput=document.querySelector('#cfgSchoolName');
   const destinationSelect=document.querySelector('#cfgDestination');
   const addDestinationBtn=document.querySelector('#addDestinationBtn');
+  const cancelDestinationBtn=document.querySelector('#cancelDestinationBtn');
   const settingsBtn=document.querySelector('#settingsBtn');
   const saveSettingsBtn=document.querySelector('#saveSettingsBtn');
   const useCurrentBtn=document.querySelector('#useCurrentAsSchoolBtn');
@@ -54,6 +55,11 @@
   function setDestinationLock(locked){
     for(const element of [destinationSelect,addDestinationBtn,nameInput,lat,lng,useCurrentBtn])if(element)element.disabled=locked;
   }
+  function setDraftUi(active){
+    if(saveSettingsBtn)saveSettingsBtn.textContent=active?'Guardar nuevo destino':'Guardar cambios';
+    if(addDestinationBtn){if(active)addDestinationBtn.classList.add('hidden');else addDestinationBtn.classList.remove('hidden');}
+    if(cancelDestinationBtn){if(active)cancelDestinationBtn.classList.remove('hidden');else cancelDestinationBtn.classList.add('hidden');}
+  }
   function showError(message){if(!settingsError)return;settingsError.textContent=message;settingsError.classList.remove('hidden');}
   function clearError(){settingsError?.classList.add('hidden');}
   function appendTelemetry(event,extra={}){
@@ -62,17 +68,21 @@
     localStorage.setItem(TELEMETRY_KEY,JSON.stringify(items.slice(0,1000)));
   }
   function onSettingsOpen(){
-    const model=getModel({persist:true});draftId=null;pendingSave=null;renderOptions(model);destinationSelect.value=model.activeDestinationId;setDestinationLock(journeyActive());clearError();
+    const model=getModel({persist:true});draftId=null;pendingSave=null;renderOptions(model);destinationSelect.value=model.activeDestinationId;setDestinationLock(journeyActive());setDraftUi(false);clearError();
   }
   function onDestinationChange(){
     if(journeyActive())return;
-    const model=getModel(),destination=model.destinations.find(item=>item.id===destinationSelect.value);draftId=null;fillDestination(destination);clearError();
+    const model=getModel(),destination=model.destinations.find(item=>item.id===destinationSelect.value);draftId=null;pendingSave=null;fillDestination(destination);setDraftUi(false);clearError();
   }
   function addDestination(){
     if(journeyActive()){showError('Reinicia o completa el trayecto antes de cambiar de destino.');return;}
-    const model=getModel();draftId=`dest-${Date.now()}`;renderOptions(model,model.activeDestinationId);
+    const model=getModel();draftId=`dest-${Date.now()}`;pendingSave=null;renderOptions(model,model.activeDestinationId);
     destinationSelect.innerHTML+=`<option value="${escapeHtml(draftId)}">Nuevo destino</option>`;destinationSelect.value=draftId;
-    if(nameInput)nameInput.value='';if(lat)lat.value='';if(lng)lng.value='';clearError();nameInput?.focus();
+    if(nameInput)nameInput.value='';if(lat)lat.value='';if(lng)lng.value='';setDraftUi(true);clearError();nameInput?.focus();
+  }
+  function cancelDestination(){
+    if(!draftId)return;
+    const model=getModel();draftId=null;pendingSave=null;renderOptions(model);destinationSelect.value=model.activeDestinationId;fillDestination(model.active);setDraftUi(false);clearError();
   }
   function beforeSave(event){
     if(journeyActive()){
@@ -88,7 +98,7 @@
     if(index>=0)destinations[index]=destination;else destinations.push(destination);
     writeConfig({...saved,destinations,activeDestinationId:targetId,school:{name:destination.name,lat:destination.lat,lng:destination.lng}});
     if(pendingSave.previousId!==targetId)appendTelemetry('DESTINATION_CHANGED',{fromDestinationId:pendingSave.previousId,fromDestinationName:pendingSave.previousName,toDestinationId:targetId,toDestinationName:destination.name,destinationLatitude:destination.lat,destinationLongitude:destination.lng});
-    draftId=null;pendingSave=null;const model=getModel();renderOptions(model);clearError();
+    draftId=null;pendingSave=null;const model=getModel();renderOptions(model);setDraftUi(false);clearError();
   }
 
   document.querySelector('#latMinusBtn')?.addEventListener('click',()=>toggleSign(lat));
@@ -96,7 +106,8 @@
   settingsBtn?.addEventListener('click',onSettingsOpen);
   destinationSelect?.addEventListener('change',onDestinationChange);
   addDestinationBtn?.addEventListener('click',addDestination);
+  cancelDestinationBtn?.addEventListener('click',cancelDestination);
   saveSettingsBtn?.addEventListener('click',beforeSave,true);
   saveSettingsBtn?.addEventListener('click',afterSave);
-  getModel({persist:true});
+  getModel({persist:true});setDraftUi(false);
 })();
