@@ -86,19 +86,20 @@ async function testEarlyActivationAndPolling(source){
   h.element('#manualDistanceInput').value='50000';await h.event('#manualDistanceInput','change');
   assert(!h.element('#pickupBtn').disabled,'Can activate from 50 km');
   await h.event('#pickupBtn','click');
-  assert(h.journey().status==='OUTSIDE'&&h.element('#pickupBtn')['data-state']==='OUTSIDE','Outside activation has red state');
+  assert(h.journey().status==='OUTSIDE'&&h.element('#pickupBtn')['data-state']==='OUTSIDE'&&h.element('#statusMessage').textContent.includes('te avisaremos cuando estés cerca'),'Outside activation has red state and far-away guidance');
   assert(h.measurementTimerMs()===60000,'OUTSIDE polls every 60s');
   h.element('#manualDistanceInput').value='1000';await h.event('#manualDistanceInput','change');
-  assert(h.journey().status==='WAITING'&&h.measurementTimerMs()===30000,'WAITING changes polling to 30s');
+  assert(h.journey().status==='WAITING'&&h.measurementTimerMs()===30000&&h.element('#statusMessage').textContent.includes('rango de espera'),'WAITING changes polling and guidance');
   h.element('#manualDistanceInput').value='100';await h.event('#manualDistanceInput','change');
-  assert(h.journey().status==='READY'&&h.measurementTimerMs()===10000,'READY changes polling to 10s');
+  assert(h.journey().status==='READY'&&h.measurementTimerMs()===10000&&h.element('#statusMessage').textContent.includes('muy cerca'),'READY changes polling and guidance');
   h.element('#manualDistanceInput').value='20';await h.event('#manualDistanceInput','change');
   assert(h.journey().status==='AT_GATE'&&h.measurementTimerMs()===10000,'AT_GATE keeps 10s cadence');
-  assert(h.element('#pickupBtnText').textContent==='ESPERANDO ENTREGA'&&h.element('#statusMessage').textContent.includes('Has llegado'),'AT_GATE shows waiting for delivery');
+  assert(h.element('#pickupBtnText').textContent==='ESPERANDO ENTREGA'&&h.element('#statusMessage').textContent.includes('Has llegado')&&h.element('#statusMessage').textContent.includes('Esperando la entrega'),'AT_GATE shows waiting for delivery');
   h.element('#manualDistanceInput').value='75000';await h.event('#manualDistanceInput','change');
   assert(h.journey().status==='AT_GATE','Distance increase never regresses attained state');
   h.win.NEXUS_TUTOR_COMPLETE_JOURNEY();await Promise.resolve();
-  assert(h.journey().status==='COMPLETED'&&h.element('#statusMessage').textContent.includes('gran día'),'Completion shows final greeting');
+  assert(h.journey().status==='COMPLETED'&&h.element('#pickupBtnText').textContent==='SOLICITUD COMPLETADA'&&h.element('#statusMessage').textContent.includes('Solicitud completada')&&h.element('#statusMessage').textContent.includes('excelente día')&&h.element('#statusMessage').textContent.includes('Que les vaya muy bien'),'Completion shows final request status and greeting');
+  assert(h.logs()[0].status==='COMPLETED'&&h.logs()[0].message==='Solicitud completada','Completion is recorded as request completed');
   assert(h.measurementTimerMs()===null,'Completion stops proximity polling');
   return ['Fresh required','50km activation','OUTSIDE state','OUTSIDE cadence','WAITING cadence','READY cadence','AT_GATE cadence cap','Waiting delivery UI','Monotonic after gate','Completed greeting','Completion stops polling'];
 }
