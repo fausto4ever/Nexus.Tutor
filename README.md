@@ -20,7 +20,7 @@ La aplicación funciona completamente en el navegador y **no escribe nada en Con
 5. Al pulsarlo se inicia una prueba local en estado WAITING.
 6. Nexus.Tutor vuelve a medir cada 30 segundos.
 7. La progresión es monotónica: `WAITING -> READY -> AT_GATE`. El GPS no hace retroceder el estado si una lectura posterior fluctúa.
-8. Se conserva un historial local de los cambios de estado y las distancias observadas.
+8. Se conserva un historial local de los cambios de estado y de cada medición periódica, aunque el estado o la distancia no cambien.
 
 ## Privacidad del laboratorio
 
@@ -47,3 +47,13 @@ Incluye manifest y service worker. La geolocalización del navegador requiere co
 - Evaluar fluctuación/precisión GPS junto con cada lectura.
 - Decidir proveedor de ruteo para producción, si realmente aporta valor frente a distancia directa.
 - Conectar posteriormente Nexus.Tutor con Gateway para crear solicitudes reales y recibir estados canonicos.
+
+## Corrección 0.1.3: historial periódico
+
+- Durante una prueba activa, cada ciclo de 30 segundos agrega una medición al historial con hora, estado, distancia y método usado, también en el simulador manual.
+- Los cambios de estado siguen registrándose inmediatamente como eventos separados. El registro periódico continúa en AT_GATE hasta reiniciar la prueba.
+- Si no se puede medir, el ciclo registra “Medición periódica no disponible”, sin reutilizar una distancia anterior como si fuera nueva.
+- Reiniciar detiene el registro periódico. Se descartan las mediciones pendientes de una prueba anterior.
+- Se conserva el límite existente de los últimos 60 eventos en localStorage.
+- La prueba debe mantenerse abierta en primer plano; no se reconstruyen mediciones de intervalos suspendidos por el navegador.
+- CSS y JavaScript permanecen en archivos externos cargados mediante link y script src.
