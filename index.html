@@ -27,7 +27,10 @@
           <span class="muted">Destino</span>
           <strong id="schoolName">Instituto Ausbel</strong>
         </div>
-        <span id="schoolLock" class="badge badge-warn">Sin fijar</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+          <span id="connectionBadge" class="badge badge-ok">● En línea</span>
+          <span id="schoolLock" class="badge badge-warn">Sin fijar</span>
+        </div>
       </div>
       <div id="schoolCoords" class="coords">Configura la ubicación fija de la escuela.</div>
     </section>
@@ -40,10 +43,10 @@
         <span id="distanceSource">Distancia directa</span>
       </div>
       <div class="progress-track" aria-hidden="true"><div id="distanceProgress" class="progress-bar"></div></div>
-      <div class="threshold-row">
-        <span>WAITING <b id="waitingLabel">1000 m</b></span>
-        <span>READY <b id="readyLabel">100 m</b></span>
-        <span>AT GATE <b id="gateLabel">20 m</b></span>
+      <div class="threshold-row" style="position:relative;display:block;height:44px;margin-top:4px">
+        <span id="waitingMarker" style="position:absolute;left:0;top:0;min-width:0;width:auto;white-space:nowrap;transform:translateX(0)">WAITING <b id="waitingLabel">1000 m</b></span>
+        <span id="readyMarker" style="position:absolute;left:90%;top:0;min-width:0;width:auto;white-space:nowrap;transform:translateX(-50%)">READY <b id="readyLabel">100 m</b></span>
+        <span id="gateMarker" style="position:absolute;left:98%;top:0;min-width:0;width:auto;white-space:nowrap;transform:translateX(-50%)">AT GATE <b id="gateLabel">20 m</b></span>
       </div>
     </section>
 
@@ -100,7 +103,10 @@
     <section class="log-card card">
       <div class="section-title">
         <strong>Historial de esta prueba</strong>
-        <button id="clearLogBtn" class="text-btn">Limpiar</button>
+        <div>
+          <button id="downloadTelemetryBtn" class="text-btn" type="button">Descargar JSON</button>
+          <button id="clearLogBtn" class="text-btn" type="button">Limpiar</button>
+        </div>
       </div>
       <div id="eventLog" class="event-log"><div class="empty-log">Sin eventos todavía.</div></div>
     </section>
