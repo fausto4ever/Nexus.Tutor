@@ -13,8 +13,12 @@ Nexus.Tutor es el laboratorio móvil del tutor para probar cercanía y el flujo 
 5. Al pulsarlo fuera del radio comienza una prueba local en OUTSIDE; al entrar al rango operativo avanza a WAITING. Dentro del rango comienza en WAITING y evalúa READY/AT_GATE.
 6. Nexus.Tutor adapta la frecuencia de medición conforme se acerca: OUTSIDE 60 s, WAITING 30 s, READY 10 s y AT_GATE mantiene 10 s.
 7. La progresión es monotónica: `OUTSIDE -> WAITING -> READY -> AT_GATE -> COMPLETED`. El GPS no hace retroceder el estado si una lectura posterior fluctúa.
-8. AT_GATE muestra **Has llegado · Esperando la entrega**. COMPLETED queda preparado para la futura confirmación de Nexus.Access/Gateway y muestra el cierre del trayecto.
-9. Se conserva un historial local de los cambios de estado y de cada medición periódica.
+8. OUTSIDE muestra **Aún te encuentras muy lejos del destino. Tu trayecto ya está activo; te avisaremos cuando estés cerca.**
+9. WAITING muestra **Ya estás dentro del rango de espera. Seguimos tu llegada.**
+10. READY muestra **Ya estás muy cerca del destino. Prepárate para la entrega.**
+11. AT_GATE muestra **Has llegado. Esperando la entrega del alumno.**
+12. COMPLETED queda preparado para la futura confirmación de Nexus.Access/Gateway y muestra **Solicitud completada. ¡Que tengas un excelente día! Que les vaya muy bien.**
+13. Se conserva un historial local de los cambios de estado y de cada medición periódica.
 
 ## Destinos de prueba
 
@@ -34,11 +38,11 @@ La telemetría de diagnóstico se conserva en el dispositivo y sólo se exporta 
 
 ## Estados de cercanía
 
-- **OUTSIDE**: trayecto iniciado fuera del rango operativo.
-- **WAITING**: dentro del rango WAITING configurado.
-- **READY**: dentro del rango READY.
-- **AT_GATE**: punto de recogida alcanzado; queda esperando la entrega.
-- **COMPLETED**: entrega confirmada; finaliza el seguimiento de proximidad.
+- **OUTSIDE**: trayecto iniciado fuera del rango operativo; halo rojo y aviso de que todavía se encuentra lejos.
+- **WAITING**: dentro del rango WAITING configurado; halo naranja.
+- **READY**: dentro del rango READY; halo azul.
+- **AT_GATE**: punto de recogida alcanzado; halo verde y espera de la entrega.
+- **COMPLETED**: entrega confirmada por la escuela; muestra solicitud completada y finaliza el seguimiento de proximidad.
 
 La progresión de estado es monotónica durante un trayecto activo. La distancia visible, en cambio, siempre representa la medición real o la última conocida.
 
@@ -103,6 +107,7 @@ Incluye manifest y service worker. La geolocalización del navegador requiere co
 
 - Activación anticipada desde cualquier distancia.
 - Halos OUTSIDE rojo, WAITING naranja, READY azul y AT_GATE verde.
+- Mensajes progresivos de llegada y cierre de solicitud completada.
 - Progresión monotónica y restauración de estado.
 - Conservación de última distancia durante recálculo/pérdida de GPS.
 - Polling adaptativo 60/30/10 s.
