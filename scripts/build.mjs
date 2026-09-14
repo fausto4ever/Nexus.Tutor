@@ -14,6 +14,11 @@ await fs.mkdir(dist,{recursive:true});
 const read=name=>fs.readFile(path.join(root,name),'utf8');
 const write=(name,content)=>fs.writeFile(path.join(dist,name),content,'utf8');
 
+const {version}=JSON.parse(await read('package.json'));
+if(!/^\d+\.\d+\.\d+$/.test(version))throw new Error('Versión de producción inválida');
+const configSource=await read('config.js');
+if(!configSource.includes(`version:'${version}'`))throw new Error('La versión de config.js no coincide con package.json');
+
 async function buildJs(input,output){
   const source=await read(input);
   const minified=await minifyJs(source,{
@@ -55,11 +60,13 @@ if(cssOut.errors.length)throw new Error(cssOut.errors.join('\n'));
 await write('styles.min.css',cssOut.styles);
 
 let html=await read('index.html');
+if(!html.includes(`CONTROL DE ACCESO · v${version}</div>`))throw new Error('La versión visible no coincide con package.json');
 html=html
   .replace('href="styles.css"','href="styles.min.css"')
   .replace('src="config.js"','src="config.min.js"')
   .replace('src="app.js"','src="app.min.js"')
   .replace('src="coordinates.js"','src="coordinates.min.js"');
+html=html.replace(/((?:src|href)=")([^"]+\.(?:js|css))"/g,(_,prefix,asset)=>`${prefix}${asset}?v=${version}"`);
 html=await minifyHtml(html,{
   collapseWhitespace:true,
   removeComments:true,
@@ -73,11 +80,13 @@ html=await minifyHtml(html,{
 await write('index.html',html);
 
 const swSource=await read('sw.js');
+if(!swSource.includes(`nexus-tutor-${version}'`))throw new Error('La versión de caché no coincide con package.json');
 const swProd=swSource
   .replace("'./styles.css'","'./styles.min.css'")
   .replace("'./config.js'","'./config.min.js'")
   .replace("'./app.js'","'./app.min.js'")
-  .replace("'./coordinates.js'","'./coordinates.min.js'");
+  .replace("'./coordinates.js'","'./coordinates.min.js'")
+  .replace(/'(\.\/[^']+\.(?:js|css))'/g,(_,asset)=>`'${asset}?v=${version}'`);
 const swMinified=await minifyJs(swProd,{
   compress:{passes:2},
   mangle:true,
@@ -94,5 +103,11 @@ const files=await fs.readdir(dist);
 if(files.some(name=>name.endsWith('.map')))throw new Error('El build contiene sourcemaps');
 if(files.some(name=>['app.js','config.js','coordinates.js','styles.css'].includes(name)))throw new Error('El build contiene archivos fuente sin minificar');
 
-console.log('Nexus.Tutor production build generado en dist/');
+for(const asset of ['app.min.js','config.min.js','coordinates.min.js','styles.min.css']){
+  const versioned=`${asset}?v=${version}`;
+  if(!html.includes(versioned)||!swProd.includes(versioned))throw new Error(`Referencia sin versión: ${asset}`);
+}
+if(/<script\b(?![^>]*\bsrc=)[^>]*>/i.test(html)||/<style\b/i.test(html))throw new Error('El HTML contiene JS/CSS inline');
+
+console.log(`Nexus.Tutor ${version} production build generado en dist/`);
 console.log(files.sort().join('\n'));

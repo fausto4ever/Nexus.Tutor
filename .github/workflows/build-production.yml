@@ -2,6 +2,8 @@ name: Build Nexus.Tutor production
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
     paths:
@@ -15,6 +17,7 @@ on:
       - 'icon.svg'
       - 'package.json'
       - 'scripts/build.mjs'
+      - 'scripts/test-history.mjs'
       - '.github/workflows/build-production.yml'
 
 permissions:
@@ -34,6 +37,9 @@ jobs:
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+
+      - name: Test history
+        run: npm test
 
       - name: Build production
         run: npm run build
@@ -59,6 +65,7 @@ jobs:
           grep -q 'styles.min.css' dist/index.html
 
       - name: Commit dist
+        if: github.event_name != 'pull_request'
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'

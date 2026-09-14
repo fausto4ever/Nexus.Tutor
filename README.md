@@ -57,3 +57,11 @@ Incluye manifest y service worker. La geolocalización del navegador requiere co
 - Se conserva el límite existente de los últimos 60 eventos en localStorage.
 - La prueba debe mantenerse abierta en primer plano; no se reconstruyen mediciones de intervalos suspendidos por el navegador.
 - CSS y JavaScript permanecen en archivos externos cargados mediante link y script src.
+
+## Versionado de producción
+
+- package.json, config.js, la versión visible y la caché del service worker deben coincidir; el build falla si detecta diferencias.
+- El build agrega la versión de package.json a las referencias externas de JS y CSS, por ejemplo app.min.js?v=0.1.3.
+- El service worker precarga esas mismas URLs versionadas.
+- Se mantiene el build minificado y ofuscado, sin sourcemaps ni JS/CSS inline.
+- El workflow valida pruebas y build en pull requests; al publicar en main también actualiza dist/.
