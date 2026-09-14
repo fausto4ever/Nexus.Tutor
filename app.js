@@ -60,8 +60,25 @@
   }
   function candidateStatus(distance){const t=config.thresholds;if(distance<=Number(t.atGateMeters))return'AT_GATE';if(distance<=Number(t.readyMeters))return'READY';if(distance<=Number(t.waitingMeters))return'WAITING';return'OUTSIDE';}
   function promoteStatus(candidate,distance){if(!journey.active)return;const current=journey.status||'WAITING';if((STATUS_RANK[candidate]||0)>(STATUS_RANK[current]||0)){journey.status=candidate;saveJourney();addLog(candidate,manualDistanceEnabled?'Avance por simulación manual':'Avance automático',distance);}}
-  async function refreshMeasurement({allowPromotion=true}={}){
-    try{const result=await measureDistance();latestDistance=result.meters;latestSource=result.source;journey.lastCheckedAt=new Date().toISOString();saveJourney();if(allowPromotion&&journey.active)promoteStatus(candidateStatus(latestDistance),latestDistance);render();}catch(err){console.warn(err);render();}
+  async function refreshMeasurement({allowPromotion=true,recordMeasurement=false}={}){
+    const measuredJourney=journey;
+    try{
+      const result=await measureDistance();
+      if(journey!==measuredJourney)return;
+      latestDistance=result.meters;latestSource=result.source;
+      journey.lastCheckedAt=new Date().toISOString();saveJourney();
+      if(allowPromotion&&journey.active)promoteStatus(candidateStatus(latestDistance),latestDistance);
+      if(recordMeasurement&&journey.active){
+        const sourceLabel={manual:'simulación manual',direct:'GPS · distancia directa',driving:'ruta en auto','direct-fallback':'ruta no disponible · distancia directa'};
+        addLog(journey.status,`Medición periódica · ${sourceLabel[result.source]||result.source}`,latestDistance);
+      }
+      render();
+    }catch(err){
+      if(journey!==measuredJourney)return;
+      console.warn(err);
+      if(recordMeasurement&&journey.active)addLog(journey.status,'Medición periódica no disponible',null);
+      render();
+    }
   }
   function formatDistance(m){if(!Number.isFinite(Number(m)))return'—';m=Number(m);return m>=1000?`${(m/1000).toFixed(m>=10000?0:1)} km`:`${Math.round(m)} m`;}
   function render(){
@@ -83,7 +100,7 @@
   }
   function startJourney(){if(els.pickupBtn.disabled||journey.active)return;journey={active:true,status:'WAITING',startedAt:new Date().toISOString(),lastCheckedAt:null};saveJourney();addLog('WAITING',manualDistanceEnabled?'Inicio de prueba manual':'Inicio de prueba',latestDistance);refreshMeasurement({allowPromotion:true});startRefreshLoop();render();}
   function resetJourney(){journey={active:false,status:'OUTSIDE',startedAt:null,lastCheckedAt:null};saveJourney();stopRefreshLoop();if((currentPosition||manualDistanceEnabled)&&schoolReady())refreshMeasurement({allowPromotion:false});else render();}
-  function startRefreshLoop(){stopRefreshLoop();const seconds=Math.max(5,Number(config.refreshSeconds)||30);nextRefreshAt=Date.now()+seconds*1000;refreshTimer=setInterval(async()=>{await refreshMeasurement({allowPromotion:true});nextRefreshAt=Date.now()+seconds*1000;},seconds*1000);countdownTimer=setInterval(updateCountdown,1000);updateCountdown();}
+  function startRefreshLoop(){stopRefreshLoop();const seconds=Math.max(5,Number(config.refreshSeconds)||30);nextRefreshAt=Date.now()+seconds*1000;refreshTimer=setInterval(async()=>{await refreshMeasurement({allowPromotion:true,recordMeasurement:true});nextRefreshAt=Date.now()+seconds*1000;},seconds*1000);countdownTimer=setInterval(updateCountdown,1000);updateCountdown();}
   function stopRefreshLoop(){clearInterval(refreshTimer);clearInterval(countdownTimer);refreshTimer=countdownTimer=null;nextRefreshAt=null;els.countdown.textContent='—';}
   function updateCountdown(){if(!nextRefreshAt){els.countdown.textContent='—';return;}els.countdown.textContent=`${Math.max(0,Math.ceil((nextRefreshAt-Date.now())/1000))} s`;}
   function openSettings(){els.cfgSchoolName.value=config.school?.name||'';els.cfgLat.value=schoolReady()?config.school.lat:'';els.cfgLng.value=schoolReady()?config.school.lng:'';els.cfgWaiting.value=config.thresholds.waitingMeters;els.cfgReady.value=config.thresholds.readyMeters;els.cfgGate.value=config.thresholds.atGateMeters;els.cfgDistanceMode.value=config.distanceMode||'direct';els.settingsError.classList.add('hidden');els.settingsDialog.showModal();}
