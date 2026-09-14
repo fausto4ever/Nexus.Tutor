@@ -1,9 +1,9 @@
 {
   "name": "nexus-tutor",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "scripts": {
-    "test": "node scripts/test-history.mjs && node scripts/test-destinations.mjs",
+    "test": "node scripts/test-history.mjs && node scripts/test-destinations.mjs && node scripts/test-ui.mjs",
     "build": "node scripts/build.mjs"
   },
   "dependencies": {
