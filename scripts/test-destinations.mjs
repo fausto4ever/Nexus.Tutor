@@ -15,6 +15,7 @@ function createHarness(source){
   const navigator={onLine:true};
   const win={NEXUS_TUTOR_DEFAULTS:defaults};
 
+  // Simula los listeners que app.js registra antes de coordinates.js.
   element('#settingsBtn').addEventListener('click',()=>{
     const config=JSON.parse(localStorage.getItem('nexusTutorConfigV1')||'{}');
     const school={...defaults.school,...(config.school||{})};
@@ -56,14 +57,15 @@ assert(config.destinations[0].name==='Escuela principal'&&config.school.name==='
 
 await h.dispatch('#settingsBtn','click');
 assert(h.element('#cfgDestination').value==='primary'&&h.element('#cfgDestination').innerHTML.includes('Escuela principal'),'Settings selector shows primary destination');checks.push('Selector populated');
+assert(h.element('#saveSettingsBtn').textContent==='Guardar cambios','Default settings action is explicit');checks.push('Default save label');
 
 await h.dispatch('#addDestinationBtn','click');
 assert(h.element('#cfgSchoolName').value===''&&h.element('#cfgLat').value===''&&h.element('#cfgLng').value==='','New destination starts clean');checks.push('Clean draft');
-assert(h.element('#saveSettingsBtn').textContent==='Guardar nuevo destino','New destination exposes explicit save action');checks.push('Explicit save label');
-assert(!h.element('#cancelDestinationBtn').classList.hidden,'Cancel action is available for draft');checks.push('Draft cancel available');
+assert(h.element('#saveSettingsBtn').textContent==='Guardar nuevo destino','New destination exposes explicit save action');checks.push('Draft save label');
+h.element('#cfgSchoolName').value='Temporal';h.element('#cfgLat').value='19.4';h.element('#cfgLng').value='-101.4';
 await h.dispatch('#cancelDestinationBtn','click');
-assert(h.element('#cfgDestination').value==='primary'&&h.element('#cfgSchoolName').value==='Escuela principal','Cancel restores active destination');checks.push('Cancel restores destination');
-assert(h.config().destinations.length===1,'Cancel does not persist draft');checks.push('Cancel leaves storage untouched');
+assert(h.element('#cfgSchoolName').value==='Escuela principal'&&String(h.element('#cfgLat').value)==='19'&&h.element('#saveSettingsBtn').textContent==='Guardar cambios','Cancel restores active destination and normal action');checks.push('Cancel draft');
+assert(h.config().destinations.length===1,'Cancel does not persist draft destination');checks.push('Cancel no persistence');
 
 await h.dispatch('#addDestinationBtn','click');
 h.element('#cfgSchoolName').value='Destino auto';h.element('#cfgLat').value='19.1';h.element('#cfgLng').value='-101.2';
@@ -73,6 +75,7 @@ assert(config.destinations.length===2,'Adding destination must keep previous des
 assert(config.destinations.some(item=>item.id==='primary'&&item.name==='Escuela principal'),'Primary destination remains untouched');checks.push('Primary retained');
 const secondId=config.activeDestinationId;
 assert(secondId!=='primary'&&config.school.name==='Destino auto','New destination becomes active only after save');checks.push('Activate new destination');
+assert(h.element('#saveSettingsBtn').textContent==='Guardar cambios','Successful save returns normal settings action');checks.push('Save label restored');
 assert(h.telemetry().some(item=>item.event==='DESTINATION_CHANGED'&&item.fromDestinationId==='primary'&&item.toDestinationId===secondId&&item.toDestinationName==='Destino auto'),'Destination switch is logged in telemetry');checks.push('Destination telemetry');
 
 await h.dispatch('#settingsBtn','click');
