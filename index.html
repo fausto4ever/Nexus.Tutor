@@ -15,7 +15,7 @@
   <main class="app-shell">
     <header class="topbar">
       <div>
-        <div class="eyebrow">CONTROL DE ACCESO · v0.1.5</div>
+        <div class="eyebrow">CONTROL DE ACCESO · v0.1.6</div>
         <h1>Nexus.Tutor</h1>
       </div>
       <button id="settingsBtn" class="icon-btn" aria-label="Configuración">⚙️</button>
@@ -77,7 +77,7 @@
     <section class="status-card card">
       <span class="muted">Estado de prueba</span>
       <div id="statusPill" role="status" aria-live="polite" class="status-pill status-outside">FUERA DEL UMBRAL</div>
-      <p id="statusMessage">Acércate al radio WAITING para habilitar la solicitud.</p>
+      <p id="statusMessage">Puedes iniciar el trayecto desde cualquier distancia.</p>
       <div class="sync-row">
         <span>Próxima medición</span>
         <strong id="countdown">—</strong>
@@ -89,7 +89,7 @@
     </section>
 
     <section class="action-zone">
-      <button id="pickupBtn" class="pickup-btn" disabled>
+      <button id="pickupBtn" class="pickup-btn" data-state="IDLE" aria-describedby="statusMessage actionHint" disabled>
         <span class="pickup-icon">⌖</span>
         <span id="pickupBtnText">VOY POR MI HIJO</span>
       </button>

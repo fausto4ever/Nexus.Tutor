@@ -35,7 +35,7 @@
     els.eventLog.innerHTML=items.map(item=>{const time=new Date(item.at).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'});const d=item.distance==null?'':` · ${formatDistance(item.distance)}`;return `<div class="event-item" data-status="${escapeHtml(item.status)}"><span class="event-dot"></span><span><strong>${escapeHtml(item.status)}</strong> ${escapeHtml(item.message||'')}${escapeHtml(d)}</span><span class="event-time">${time}</span></div>`;}).join('');
   }
   function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
-  function schoolReady(){return Number.isFinite(Number(config.school?.lat))&&Number.isFinite(Number(config.school?.lng));}
+  function schoolReady(){const lat=config.school?.lat,lng=config.school?.lng;return lat!=null&&lng!=null&&String(lat).trim()!==''&&String(lng).trim()!==''&&Number.isFinite(Number(lat))&&Number.isFinite(Number(lng))&&Math.abs(Number(lat))<=90&&Math.abs(Number(lng))<=180;}
   function haversine(lat1,lon1,lat2,lon2){const R=6371000,toRad=v=>v*Math.PI/180;const p1=toRad(lat1),p2=toRad(lat2),dp=toRad(lat2-lat1),dl=toRad(lon2-lon1);const a=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
   function manualStep(){const step=Number(els.manualDistanceStep.value);return[1,10,100,1000].includes(step)?step:10;}
   function syncManualControls(){
@@ -112,14 +112,30 @@
     const raw=Number.isFinite(latestDistance)?candidateStatus(latestDistance):'OUTSIDE';const status=journey.active?journey.status:raw;
     const labels={OUTSIDE:'FUERA DEL UMBRAL',WAITING:'EN CAMINO · WAITING',READY:'PRÓXIMO · READY',AT_GATE:'EN LA PUERTA · AT GATE'};const classes={OUTSIDE:'status-outside',WAITING:'status-waiting',READY:'status-ready',AT_GATE:'status-gate'};
     els.statusPill.textContent=labels[status]||status;els.statusPill.className=`status-pill ${classes[status]||'status-outside'}`;
-    if(journey.active){els.statusMessage.textContent=status==='AT_GATE'?'Alcanzaste AT_GATE. Se conserva aunque aumente la distancia.':status==='READY'?'Alcanzaste READY. Se conserva aunque aumente la distancia.':manualDistanceEnabled?'Solicitud local activa. Usa + y − para simular que te acercas o te alejas.':`Solicitud local activa. Se revisa la distancia cada ${config.refreshSeconds||30} segundos.`;els.pickupBtn.disabled=true;els.pickupBtn.classList.add('is-active');els.pickupBtnText.textContent=labels[status];els.resetJourneyBtn.classList.remove('hidden');els.actionHint.textContent='Prueba local: ningún estado se envía al Gateway.';}else{
+    els.pickupBtn.setAttribute('data-state',journey.active?status:'IDLE');
+    if(journey.active){
+      const messages={
+        OUTSIDE:`Trayecto iniciado. Aún estás fuera del rango operativo. Revisaremos tu cercanía cada ${config.refreshSeconds||30} segundos y activaremos WAITING cuando entres.`,
+        WAITING:'Entraste al rango operativo. Estás en camino; el estado se conserva aunque aumente la distancia.',
+        READY:'Estás cerca. Alcanzaste READY; el estado se conserva aunque aumente la distancia.',
+        AT_GATE:'Llegaste al punto de recogida. AT_GATE se conserva hasta reiniciar la prueba.'
+      };
+      els.statusMessage.textContent=Number.isFinite(latestDistance)?messages[status]:'Esperando una ubicación válida. Se conserva el último estado alcanzado.';
+      els.pickupBtn.disabled=true;els.pickupBtn.classList.add('is-active');
+      els.pickupBtnText.textContent=status==='OUTSIDE'?'TRAYECTO INICIADO':status==='AT_GATE'?'LLEGASTE · AT GATE':labels[status];
+      if(status==='OUTSIDE')els.statusPill.textContent='ESPERANDO RANGO · OUTSIDE';
+      els.resetJourneyBtn.classList.remove('hidden');
+      els.actionHint.textContent='Prueba local: el colegio todavía no recibe avisos.';
+    }else{
       els.pickupBtn.classList.remove('is-active');els.resetJourneyBtn.classList.add('hidden');
-      const hasDistance=Number.isFinite(latestDistance);const canStart=schoolReady()&&(manualDistanceEnabled||currentPosition)&&hasDistance&&latestDistance<=Number(config.thresholds.waitingMeters);
-      els.pickupBtn.disabled=!canStart;els.pickupBtnText.textContent='VOY POR MI HIJO';els.actionHint.textContent=!schoolReady()?'Primero fija la ubicación de la escuela.':!manualDistanceEnabled&&!currentPosition?'Esperando ubicación GPS…':canStart?'Estás dentro del umbral WAITING. Puedes iniciar.':`Acércate a ${config.thresholds.waitingMeters} m o menos para habilitar el botón.`;els.statusMessage.textContent=canStart?'Estás dentro del radio WAITING.':'Acércate al radio WAITING para habilitar la solicitud.';
+      const canStart=schoolReady()&&(manualDistanceEnabled||currentPosition)&&Number.isFinite(latestDistance);
+      els.pickupBtn.disabled=!canStart;els.pickupBtnText.textContent='VOY POR MI HIJO';
+      els.actionHint.textContent=!schoolReady()?'Primero fija la ubicación de la escuela.':!canStart?'Esperando una ubicación y distancia válidas…':'Puedes iniciar el trayecto desde cualquier distancia.';
+      els.statusMessage.textContent=canStart?(raw==='OUTSIDE'?'Puedes activar el seguimiento ahora. WAITING comenzará al entrar al rango operativo.':'Puedes iniciar el trayecto. Ya estás dentro del rango operativo.'):'Configura la escuela y espera una medición para iniciar.';
     }
     els.lastUpdate.textContent=journey.lastCheckedAt?new Date(journey.lastCheckedAt).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—';
   }
-  function startJourney(){if(els.pickupBtn.disabled||journey.active)return;journey={active:true,status:'WAITING',startedAt:new Date().toISOString(),lastCheckedAt:null};saveJourney();addLog('WAITING',manualDistanceEnabled?'Inicio de prueba manual':'Inicio de prueba',latestDistance);refreshMeasurement({allowPromotion:true});startRefreshLoop();render();}
+  function startJourney(){if(els.pickupBtn.disabled||journey.active)return;const initialStatus=candidateStatus(latestDistance)==='OUTSIDE'?'OUTSIDE':'WAITING';journey={active:true,status:initialStatus,startedAt:new Date().toISOString(),lastCheckedAt:null};saveJourney();addLog(initialStatus,initialStatus==='OUTSIDE'?'Trayecto iniciado · esperando rango operativo':manualDistanceEnabled?'Inicio de prueba manual':'Inicio de prueba',latestDistance);refreshMeasurement({allowPromotion:true});startRefreshLoop();render();}
   function resetJourney(){journey={active:false,status:'OUTSIDE',startedAt:null,lastCheckedAt:null};saveJourney();stopRefreshLoop();if((currentPosition||manualDistanceEnabled)&&schoolReady())refreshMeasurement({allowPromotion:false});else render();}
   function startRefreshLoop(){stopRefreshLoop();const seconds=Math.max(5,Number(config.refreshSeconds)||30);nextRefreshAt=Date.now()+seconds*1000;refreshTimer=setInterval(async()=>{await refreshMeasurement({allowPromotion:true,recordMeasurement:true});nextRefreshAt=Date.now()+seconds*1000;},seconds*1000);countdownTimer=setInterval(updateCountdown,1000);updateCountdown();}
   function stopRefreshLoop(){clearInterval(refreshTimer);clearInterval(countdownTimer);refreshTimer=countdownTimer=null;nextRefreshAt=null;els.countdown.textContent='—';}

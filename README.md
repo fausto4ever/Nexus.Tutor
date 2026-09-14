@@ -16,10 +16,10 @@ La aplicación funciona completamente en el navegador y **no escribe nada en Con
 3. Elegir el método de distancia:
    - Línea recta mediante GPS/Haversine.
    - Ruta en automóvil mediante el servidor público de OSRM, solo para laboratorio.
-4. Al entrar al radio WAITING se habilita el botón circular **VOY POR MI HIJO**.
-5. Al pulsarlo se inicia una prueba local en estado WAITING.
+4. Con escuela configurada y una distancia válida se habilita **VOY POR MI HIJO**, sin límite de kilometraje.
+5. Al pulsarlo fuera del radio comienza una prueba local en OUTSIDE; al entrar al rango operativo avanza a WAITING. Dentro del rango comienza en WAITING y evalúa READY/AT_GATE.
 6. Nexus.Tutor vuelve a medir cada 30 segundos.
-7. La progresión es monotónica: `WAITING -> READY -> AT_GATE`. El GPS no hace retroceder el estado si una lectura posterior fluctúa.
+7. La progresión es monotónica: `OUTSIDE -> WAITING -> READY -> AT_GATE`. El GPS no hace retroceder el estado si una lectura posterior fluctúa.
 8. Se conserva un historial local de los cambios de estado y de cada medición periódica, aunque el estado o la distancia no cambien.
 
 ## Privacidad del laboratorio
@@ -86,3 +86,13 @@ Incluye manifest y service worker. La geolocalización del navegador requiere co
 - La distancia directa se calcula localmente mediante Haversine. El navegador obtiene la ubicación del dispositivo, cuya disponibilidad offline depende del dispositivo y su proveedor de ubicación.
 - La ruta en auto envía las coordenadas actuales y del destino a OSRM por internet; si falla, se usa distancia directa. No se guarda la ruta ni se envía información al Gateway.
 - Volver a la app no reconstruye posiciones del tiempo que estuvo suspendida.
+
+## Versión 0.1.6: activación anticipada y halo de estado
+
+- Se permite iniciar desde cualquier distancia, manteniendo como requisitos la escuela configurada y una medición válida (GPS/ruta o manual).
+- OUTSIDE activo significa trayecto iniciado antes de entrar al rango operativo; revisa cada 30 s y al volver a la app. No equivale a una solicitud recibida por el colegio.
+- El halo permanece visible: rojo OUTSIDE, naranja WAITING, azul READY y verde AT_GATE. Cada color se acompaña de texto; no parpadea.
+- Al cruzar un umbral, estado, halo e historial cambian con la medición. Aumentar la distancia no reduce el estado ni el halo alcanzado.
+- Reiniciar elimina el halo activo y permite iniciar otro trayecto. Se conservan el historial periódico y la restauración de prueba.
+- La falta de ubicación se comunica por separado, conservando el último estado; no se presenta como fuera de rango ni como confirmación del colegio.
+- CSS y JS externos, versiones sincronizadas y build de producción ofuscado/minificado sin sourcemaps.

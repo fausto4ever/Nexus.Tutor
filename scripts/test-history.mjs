@@ -77,7 +77,7 @@ async function testDistanceControls(source){
   const h=createHarness(source);
   await h.event('#manualDistanceToggle','change',{target:{checked:true}});
   await h.event('#manualDistancePlus','click');
-  assert(h.element('#manualDistanceInput').value==='1010'&&h.element('#pickupBtn').disabled,'Plus can move outside WAITING before starting');
+  assert(h.element('#manualDistanceInput').value==='1010'&&!h.element('#pickupBtn').disabled,'Plus can move outside WAITING and still allow starting');
   await h.event('#manualDistanceMinus','click');
   assert(h.element('#manualDistanceInput').value==='1000'&&!h.element('#pickupBtn').disabled,'Minus enables start at WAITING boundary');
   await h.event('#pickupBtn','click');
@@ -198,6 +198,58 @@ async function testReturnRefresh(source){
   return ['Hidden pauses timers','Focus/visibility deduplication','Fresh GPS required','Immediate resume transition/log','30s cadence restored','GPS failure without stale distance','Old callback ignored','Monotonic resume status','Reset during resume','Manual resume without GPS','pageshow restoration'];
 }
 
+
+async function testEarlyActivation(source){
+  const h=createHarness(source);
+  assert(h.element('#pickupBtn').disabled,'GPS measurement required before activating');
+  await h.event('#manualDistanceToggle','change',{target:{checked:true}});
+  h.element('#manualDistanceInput').value='50000';
+  await h.event('#manualDistanceInput','change');
+  assert(!h.element('#pickupBtn').disabled,'Can activate from 50 km');
+  assert(h.element('#pickupBtn')['data-state']==='IDLE','No active halo before start');
+  await h.event('#pickupBtn','click');
+  assert(h.journey().active&&h.journey().status==='OUTSIDE'&&h.element('#pickupBtn')['data-state']==='OUTSIDE','Outside activation has red state');
+  assert(h.logs()[0].status==='OUTSIDE'&&h.logs()[0].distance===50000,'Initial OUTSIDE history');
+  await h.advance(30000);
+  assert(h.logs()[0].status==='OUTSIDE'&&h.logs()[0].distance===50000&&h.logs().length===2,'Outside periodic history');
+  const restored=createHarness(source,h.stored);
+  assert(restored.journey().status==='OUTSIDE'&&restored.element('#pickupBtn')['data-state']==='OUTSIDE','Restore outside active halo');
+  const move=async meters=>{h.element('#manualDistanceInput').value=String(meters);await h.event('#manualDistanceInput','change');};
+  for(const [distance,status] of [[1000,'WAITING'],[100,'READY'],[20,'AT_GATE']]){
+    await move(distance);
+    assert(h.journey().status===status&&h.element('#pickupBtn')['data-state']===status&&h.logs()[0].status===status&&h.logs()[0].distance===distance,'State, halo and history transition together at '+status);
+    const count=h.logs().length;
+    await move(75000);
+    assert(h.journey().status===status&&h.element('#pickupBtn')['data-state']===status&&h.logs().length===count,'Distance increase preserves '+status+' without false transition');
+    await h.advance(30000);
+    assert(h.logs()[0].distance===75000&&h.logs()[0].status===status,'Periodic actual distance preserves '+status);
+  }
+  await h.event('#resetJourneyBtn','click');
+  assert(!h.journey().active&&h.element('#pickupBtn')['data-state']==='IDLE'&&!h.element('#pickupBtn').disabled,'Reset removes halo and allows distant restart');
+  await h.event('#pickupBtn','click');
+  assert(h.journey().status==='OUTSIDE','Restart far away returns OUTSIDE');
+  const invalidStore=new Map([['nexusTutorConfigV1',JSON.stringify({school:{lat:null,lng:null}})]]);
+  const noSchool=createHarness(source,invalidStore);
+  await noSchool.event('#manualDistanceToggle','change',{target:{checked:true}});
+  assert(noSchool.element('#pickupBtn').disabled,'Unset school does not become 0,0');
+
+  const gps=createHarness(source);
+  await gps.gps(19,-101.05);
+  await gps.event('#pickupBtn','click');
+  assert(gps.journey().status==='OUTSIDE','GPS can start outside');
+  gps.visibility('hidden');
+  const resume=gps.visibility('visible');
+  gps.gpsRequests[0].success({coords:{latitude:19,longitude:-101.005,accuracy:5}});
+  await resume;
+  assert(gps.journey().status==='WAITING'&&gps.element('#pickupBtn')['data-state']==='WAITING','Resume from outside enters WAITING and updates halo');
+  const loss=gps.visibility('hidden');
+  const fail=gps.visibility('visible');
+  gps.gpsRequests[1].error({code:1});
+  await fail;
+  assert(gps.journey().status==='WAITING'&&gps.element('#pickupBtn')['data-state']==='WAITING'&&gps.logs()[0].distance===null,'GPS failure preserves attained halo and records no distance');
+  return ['Fresh measurement required','50 km activation','Idle halo','Active OUTSIDE and initial log','OUTSIDE 30s log','OUTSIDE reload','All threshold halos and immediate logs','All states retained at 75 km','Periodic actual distance','Reset halo and distant restart','School coordinates required','GPS outside activation','Resume enters range','GPS loss distinct from range'];
+}
+
 const source=await fs.readFile(new URL('../app.js',import.meta.url),'utf8');
-const checks=[...await testHistory(source),...await testDistanceControls(source),...await testReturnRefresh(source)];
+const checks=[...await testHistory(source),...await testDistanceControls(source),...await testReturnRefresh(source),...await testEarlyActivation(source)];
 console.log(`Historial: ${checks.length} comprobaciones correctas.`);
