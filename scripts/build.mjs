@@ -50,22 +50,29 @@ async function buildJs(input,output){
   await write(output,obfuscated);
 }
 
+async function buildCss(input,output){
+  const css=await read(input);
+  const result=new CleanCSS({level:2,sourceMap:false}).minify(css);
+  if(result.errors.length)throw new Error(result.errors.join('\n'));
+  await write(output,result.styles);
+}
+
 await buildJs('config.js','config.min.js');
 await buildJs('app.js','app.min.js');
 await buildJs('coordinates.js','coordinates.min.js');
-
-const css=await read('styles.css');
-const cssOut=new CleanCSS({level:2,sourceMap:false}).minify(css);
-if(cssOut.errors.length)throw new Error(cssOut.errors.join('\n'));
-await write('styles.min.css',cssOut.styles);
+await buildJs('ui.js','ui.min.js');
+await buildCss('styles.css','styles.min.css');
+await buildCss('ui.css','ui.min.css');
 
 let html=await read('index.html');
 if(!html.includes(`CONTROL DE ACCESO · v${version}</div>`))throw new Error('La versión visible no coincide con package.json');
 html=html
   .replace('href="styles.css"','href="styles.min.css"')
+  .replace('href="ui.css"','href="ui.min.css"')
   .replace('src="config.js"','src="config.min.js"')
   .replace('src="app.js"','src="app.min.js"')
-  .replace('src="coordinates.js"','src="coordinates.min.js"');
+  .replace('src="coordinates.js"','src="coordinates.min.js"')
+  .replace('src="ui.js"','src="ui.min.js"');
 html=html.replace(/((?:src|href)=")([^"]+\.(?:js|css))"/g,(_,prefix,asset)=>`${prefix}${asset}?v=${version}"`);
 html=await minifyHtml(html,{
   collapseWhitespace:true,
@@ -83,9 +90,11 @@ const swSource=await read('sw.js');
 if(!swSource.includes(`nexus-tutor-${version}'`))throw new Error('La versión de caché no coincide con package.json');
 const swProd=swSource
   .replace("'./styles.css'","'./styles.min.css'")
+  .replace("'./ui.css'","'./ui.min.css'")
   .replace("'./config.js'","'./config.min.js'")
   .replace("'./app.js'","'./app.min.js'")
   .replace("'./coordinates.js'","'./coordinates.min.js'")
+  .replace("'./ui.js'","'./ui.min.js'")
   .replace(/'(\.\/[^']+\.(?:js|css))'/g,(_,asset)=>`'${asset}?v=${version}'`);
 const swMinified=await minifyJs(swProd,{
   compress:{passes:2},
@@ -101,9 +110,9 @@ await fs.copyFile(path.join(root,'icon.svg'),path.join(dist,'icon.svg'));
 
 const files=await fs.readdir(dist);
 if(files.some(name=>name.endsWith('.map')))throw new Error('El build contiene sourcemaps');
-if(files.some(name=>['app.js','config.js','coordinates.js','styles.css'].includes(name)))throw new Error('El build contiene archivos fuente sin minificar');
+if(files.some(name=>['app.js','config.js','coordinates.js','ui.js','styles.css','ui.css'].includes(name)))throw new Error('El build contiene archivos fuente sin minificar');
 
-for(const asset of ['app.min.js','config.min.js','coordinates.min.js','styles.min.css']){
+for(const asset of ['app.min.js','config.min.js','coordinates.min.js','ui.min.js','styles.min.css','ui.min.css']){
   const versioned=`${asset}?v=${version}`;
   if(!html.includes(versioned)||!swProd.includes(versioned))throw new Error(`Referencia sin versión: ${asset}`);
 }
