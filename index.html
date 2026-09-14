@@ -15,7 +15,7 @@
   <main class="app-shell">
     <header class="topbar">
       <div>
-        <div class="eyebrow">CONTROL DE ACCESO · v0.1.3</div>
+        <div class="eyebrow">CONTROL DE ACCESO · v0.1.4</div>
         <h1>Nexus.Tutor</h1>
       </div>
       <button id="settingsBtn" class="icon-btn" aria-label="Configuración">⚙️</button>
@@ -56,16 +56,27 @@
         <label class="sim-toggle"><input id="manualDistanceToggle" type="checkbox"> <span>Manual</span></label>
       </div>
       <div id="manualDistanceControls" class="manual-distance-controls hidden">
-        <div class="manual-distance-readout"><strong id="manualDistanceValue">1000</strong><span>m</span></div>
-        <input id="manualDistanceSlider" class="distance-slider" type="range" min="0" max="1500" step="1" value="1000" aria-label="Distancia manual en metros">
-        <div class="slider-scale"><span>0 m</span><span id="manualDistanceMaxLabel">1500 m</span></div>
-        <p class="helper">Mueve el control para simular que te acercas a la escuela. Mientras esté activo, esta distancia sustituye temporalmente al GPS.</p>
+        <label class="manual-distance-label" for="manualDistanceInput">Distancia simulada (m)</label>
+        <div class="distance-stepper">
+          <button id="manualDistanceMinus" class="distance-step-btn" type="button" aria-label="Restar 10 metros">−</button>
+          <input id="manualDistanceInput" type="number" inputmode="numeric" min="0" step="1" value="1000" aria-describedby="manualDistanceHelp">
+          <button id="manualDistancePlus" class="distance-step-btn" type="button" aria-label="Sumar 10 metros">+</button>
+        </div>
+        <label class="distance-step-label" for="manualDistanceStep">Cambio por pulsación
+          <select id="manualDistanceStep">
+            <option value="1">1 m</option>
+            <option value="10" selected>10 m</option>
+            <option value="100">100 m</option>
+            <option value="1000">1 km</option>
+          </select>
+        </label>
+        <p id="manualDistanceHelp" class="helper">Usa + o −, o escribe metros enteros y confirma al salir del campo. Una ruta alterna puede aumentar la distancia; durante una prueba activa el estado alcanzado se conserva hasta reiniciar.</p>
       </div>
     </section>
 
     <section class="status-card card">
       <span class="muted">Estado de prueba</span>
-      <div id="statusPill" class="status-pill status-outside">FUERA DEL UMBRAL</div>
+      <div id="statusPill" role="status" aria-live="polite" class="status-pill status-outside">FUERA DEL UMBRAL</div>
       <p id="statusMessage">Acércate al radio WAITING para habilitar la solicitud.</p>
       <div class="sync-row">
         <span>Próxima medición</span>

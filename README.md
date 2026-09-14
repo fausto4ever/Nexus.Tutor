@@ -65,3 +65,13 @@ Incluye manifest y service worker. La geolocalización del navegador requiere co
 - El service worker precarga esas mismas URLs versionadas.
 - Se mantiene el build minificado y ofuscado, sin sourcemaps ni JS/CSS inline.
 - El workflow valida pruebas y build en pull requests; al publicar en main también actualiza dist/.
+
+## Preparado 0.1.4: simulación con + y −
+
+- El slider se sustituye por botones + y − y un campo editable de distancia en metros enteros.
+- Cada pulsación cambia 10 m de forma predeterminada. Se puede elegir 1 m, 10 m, 100 m o 1 km.
+- La distancia puede superar el umbral WAITING para simular una ruta alterna; no se permite una distancia negativa.
+- Los cambios válidos se aplican al pulsar un botón o confirmar/salir del campo. No se evalúan números incompletos mientras se escribe.
+- Durante una prueba activa el estado solo avanza: WAITING → READY → AT_GATE. Al cruzar un umbral se actualizan la vista y el historial inmediatamente.
+- Aumentar la distancia conserva el estado alcanzado, incluso fuera de WAITING. Los registros periódicos siguen guardando cada 30 s el estado conservado y la distancia actual.
+- Antes de iniciar una prueba, la vista muestra la proximidad actual y el botón solo se habilita dentro de WAITING. Reiniciar permite comenzar una prueba nueva.
