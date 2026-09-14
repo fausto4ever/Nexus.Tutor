@@ -141,22 +141,21 @@
     else els.distanceSource.textContent=latestSource==='manual'?'Distancia manual':latestSource==='driving'?'Ruta en auto':latestSource==='direct-fallback'?'Ruta no disponible · directa':'Distancia directa';
     els.manualDistanceToggle.checked=manualDistanceEnabled;els.manualDistanceControls.classList.toggle('hidden',!manualDistanceEnabled);syncManualControls();
     const raw=Number.isFinite(latestDistance)?candidateStatus(latestDistance):'OUTSIDE';const status=journey.active?journey.status:raw;
-    const labels={OUTSIDE:'FUERA DEL UMBRAL',WAITING:'EN CAMINO · WAITING',READY:'PRÓXIMO · READY',AT_GATE:'EN LA PUERTA · AT GATE',COMPLETED:'COMPLETADO'};const classes={OUTSIDE:'status-outside',WAITING:'status-waiting',READY:'status-ready',AT_GATE:'status-gate',COMPLETED:'status-gate'};
+    const labels={OUTSIDE:'LEJOS · OUTSIDE',WAITING:'EN CAMINO · WAITING',READY:'MUY CERCA · READY',AT_GATE:'EN LA PUERTA · AT GATE',COMPLETED:'SOLICITUD COMPLETADA'};const classes={OUTSIDE:'status-outside',WAITING:'status-waiting',READY:'status-ready',AT_GATE:'status-gate',COMPLETED:'status-gate'};
     els.statusPill.textContent=labels[status]||status;els.statusPill.className=`status-pill ${classes[status]||'status-outside'}`;
     els.pickupBtn.setAttribute('data-state',journey.active?(status==='COMPLETED'?'AT_GATE':status):'IDLE');
     if(journey.active){
       const messages={
-        OUTSIDE:`Trayecto iniciado. Aún estás fuera del rango operativo. Próxima revisión en ${pollSecondsForStatus('OUTSIDE')} s.`,
-        WAITING:`Entraste al rango operativo. Seguimiento cada ${pollSecondsForStatus('WAITING')} s.`,
-        READY:`Estás cerca. Seguimiento cada ${pollSecondsForStatus('READY')} s.`,
+        OUTSIDE:'Aún te encuentras muy lejos del destino. Tu trayecto ya está activo; te avisaremos cuando estés cerca.',
+        WAITING:'Ya estás dentro del rango de espera. Seguimos tu llegada.',
+        READY:'Ya estás muy cerca del destino. Prepárate para la entrega.',
         AT_GATE:'Has llegado. Esperando la entrega del alumno.',
-        COMPLETED:'Entrega completada. ¡Que tengas un gran día!'
+        COMPLETED:'Solicitud completada. ¡Que tengas un excelente día! Que les vaya muy bien.'
       };
       const freshness=measurementState==='RECALCULATING'?' Recalculando ubicación con la última distancia visible.':measurementState==='UNAVAILABLE'?' GPS no disponible; se conserva la última distancia conocida.':'';
       els.statusMessage.textContent=(messages[status]||'Trayecto activo.')+freshness;
       els.pickupBtn.disabled=true;els.pickupBtn.classList.add('is-active');
-      els.pickupBtnText.textContent=status==='OUTSIDE'?'TRAYECTO INICIADO':status==='AT_GATE'?'ESPERANDO ENTREGA':status==='COMPLETED'?'COMPLETADO':labels[status];
-      if(status==='OUTSIDE')els.statusPill.textContent='ESPERANDO RANGO · OUTSIDE';
+      els.pickupBtnText.textContent=status==='OUTSIDE'?'EN CAMINO':status==='AT_GATE'?'ESPERANDO ENTREGA':status==='COMPLETED'?'SOLICITUD COMPLETADA':labels[status];
       els.resetJourneyBtn.classList.remove('hidden');
       els.actionHint.textContent=status==='COMPLETED'?'Trayecto finalizado.':onlineState?'Prueba local: conexión disponible.':'Prueba local: sin conexión a internet.';
     }else{
@@ -165,7 +164,7 @@
       const canStart=schoolReady()&&(manualDistanceEnabled||currentPosition)&&Number.isFinite(latestDistance)&&freshEnough;
       els.pickupBtn.disabled=!canStart;els.pickupBtnText.textContent='VOY POR MI HIJO';
       els.actionHint.textContent=!schoolReady()?'Primero fija la ubicación de la escuela.':measurementState==='RECALCULATING'?'Recalculando ubicación antes de iniciar…':measurementState==='UNAVAILABLE'&&Number.isFinite(latestDistance)?'GPS no disponible. Se muestra la última distancia, pero no se usará para iniciar.':!canStart?'Esperando una ubicación y distancia válidas…':'Puedes iniciar el trayecto desde cualquier distancia.';
-      els.statusMessage.textContent=canStart?(raw==='OUTSIDE'?'Puedes activar el seguimiento ahora. WAITING comenzará al entrar al rango operativo.':'Puedes iniciar el trayecto. Ya estás dentro del rango operativo.'):'Configura la escuela y espera una medición fresca para iniciar.';
+      els.statusMessage.textContent=canStart?(raw==='OUTSIDE'?'Puedes iniciar cuando quieras. Aún estás lejos del destino; al comenzar te avisaremos cuando estés cerca.':'Puedes iniciar el trayecto. Ya estás dentro del rango operativo.'):'Configura la escuela y espera una medición fresca para iniciar.';
     }
     els.lastUpdate.textContent=journey.lastCheckedAt?new Date(journey.lastCheckedAt).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—';
   }
@@ -173,9 +172,9 @@
     if(els.pickupBtn.disabled||journey.active)return;
     const initialStatus=candidateStatus(latestDistance)==='OUTSIDE'?'OUTSIDE':'WAITING';
     journey={active:true,id:`journey-${Date.now()}`,status:initialStatus,startedAt:new Date().toISOString(),lastCheckedAt:journey.lastCheckedAt||null,lastDistance:latestDistance,lastSource:latestSource,lastAccuracy:latestAccuracy};saveJourney();
-    addLog(initialStatus,initialStatus==='OUTSIDE'?'Trayecto iniciado · esperando rango operativo':manualDistanceEnabled?'Inicio de prueba manual':'Inicio de prueba',latestDistance);recordTelemetry('JOURNEY_STARTED',{distanceMeters:latestDistance});refreshMeasurement({allowPromotion:true});startRefreshLoop();render();
+    addLog(initialStatus,initialStatus==='OUTSIDE'?'Trayecto iniciado · lejos del destino':manualDistanceEnabled?'Inicio de prueba manual':'Inicio de prueba',latestDistance);recordTelemetry('JOURNEY_STARTED',{distanceMeters:latestDistance});refreshMeasurement({allowPromotion:true});startRefreshLoop();render();
   }
-  function completeJourney(){if(!journey.active||journey.status==='COMPLETED')return;const from=journey.status;journey.status='COMPLETED';journey.completedAt=new Date().toISOString();saveJourney();stopRefreshLoop();addLog('COMPLETED','Entrega completada',latestDistance);recordTelemetry('DELIVERY_COMPLETED',{fromStatus:from});render();}
+  function completeJourney(){if(!journey.active||journey.status==='COMPLETED')return;const from=journey.status;journey.status='COMPLETED';journey.completedAt=new Date().toISOString();saveJourney();stopRefreshLoop();addLog('COMPLETED','Solicitud completada',latestDistance);recordTelemetry('DELIVERY_COMPLETED',{fromStatus:from});render();}
   function resetJourney(){recordTelemetry('JOURNEY_RESET');journey={active:false,status:'OUTSIDE',startedAt:null,lastCheckedAt:journey.lastCheckedAt||null,lastDistance:latestDistance,lastSource:latestSource,lastAccuracy:latestAccuracy};saveJourney();stopRefreshLoop();if((currentPosition||manualDistanceEnabled)&&schoolReady())refreshMeasurement({allowPromotion:false});else render();}
   function startRefreshLoop(){
     stopRefreshLoop();if(!journey.active||journey.status==='COMPLETED')return;
