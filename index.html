@@ -15,7 +15,7 @@
   <main class="app-shell">
     <header class="topbar">
       <div>
-        <div class="eyebrow top-kicker"><span>CONTROL DE ACCESO</span><span class="version-chip">v0.1.2</span></div>
+        <div class="eyebrow">CONTROL DE ACCESO · v0.1.2</div>
         <h1>Nexus.Tutor</h1>
       </div>
       <button id="settingsBtn" class="icon-btn" aria-label="Configuración">⚙️</button>
@@ -111,13 +111,19 @@
 
       <div class="grid2">
         <label>Latitud
-          <input id="cfgLat" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="19.000000 o -19.000000">
+          <div class="coord-input-wrap">
+            <button id="latMinusBtn" class="coord-sign-btn" type="button" aria-label="Cambiar signo de latitud">−</button>
+            <input id="cfgLat" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="19.000000">
+          </div>
         </label>
         <label>Longitud
-          <input id="cfgLng" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="-101.000000">
+          <div class="coord-input-wrap">
+            <button id="lngMinusBtn" class="coord-sign-btn" type="button" aria-label="Cambiar signo de longitud">−</button>
+            <input id="cfgLng" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="101.000000">
+          </div>
         </label>
       </div>
-      <p class="helper">Puedes escribir el signo − directamente. En móvil se usa teclado completo para que el signo negativo esté disponible; también se acepta coma decimal.</p>
+      <p class="helper">Usa el botón − para poner o quitar el signo negativo. También puedes escribirlo directamente y se acepta coma decimal.</p>
 
       <button id="useCurrentAsSchoolBtn" type="button" class="secondary-btn">Usar mi ubicación actual como escuela</button>
 
