@@ -1,32 +1,38 @@
 import fs from 'node:fs/promises';
 
 function createHarness(source, stored = new Map()) {
-  const elements = new Map(), timers = new Map();
-  let id = 0, clock = 0, gpsSuccessCallback, gpsErrorCallback;
+  const elements = new Map(), timers = new Map(), eventBus=new Map();
+  let id = 0, clock = 0, gpsSuccessCallback, gpsErrorCallback, lastPosition=null;
   const gpsRequests=[],windowListeners={},documentListeners={};
   const element = selector => {
     if (!elements.has(selector)) elements.set(selector, {value:'',disabled:false,textContent:'',innerHTML:'',style:{},className:'',classList:{add(){},remove(){},toggle(){}},listeners:{},setAttribute(name,value){this[name]=value;},addEventListener(name,fn){this.listeners[name]=fn;}});
     return elements.get(selector);
   };
-  const document={visibilityState:'visible',activeElement:null,querySelector:selector=>element(selector),addEventListener:(name,fn)=>{documentListeners[name]=fn;}};
-  const defaults = {version:'0.1.8',school:{name:'Escuela',lat:19,lng:-101},thresholds:{waitingMeters:1000,readyMeters:100,atGateMeters:20},distanceMode:'direct',refreshSeconds:30};
+  const document={visibilityState:'visible',activeElement:null,querySelector:selector=>element(selector),addEventListener:(name,fn)=>{documentListeners[name]=fn;},body:{appendChild(){}},createElement:()=>({click(){},remove(){}})};
+  const defaults = {version:'0.1.9',school:{name:'Escuela',lat:19,lng:-101},thresholds:{waitingMeters:1000,readyMeters:100,atGateMeters:20},distanceMode:'direct',refreshSeconds:30};
   class TestDate extends Date {constructor(...args){super(...(args.length?args:[1700000000000+clock]));}static now(){return 1700000000000+clock;}}
-  const localStorage = {getItem:k=>stored.get(k)||null,setItem:(k,v)=>stored.set(k,v)};
-  const navigator = {onLine:true,geolocation:{watchPosition(success,error){gpsSuccessCallback=success;gpsErrorCallback=error;return 1;},clearWatch(){},getCurrentPosition(success,error,options){gpsRequests.push({success,error,options});}}};
-  const runtime={dom:{one:selector=>element(selector),require:()=>true}};
+  const localStorage = {getItem:k=>stored.get(k)||null,setItem:(k,v)=>stored.set(k,v),removeItem:k=>stored.delete(k)};
+  const navigator = {onLine:true,geolocation:{watchPosition(success,error){gpsSuccessCallback=success;gpsErrorCallback=error;return 1;},clearWatch(){},getCurrentPosition(success,error,options){gpsRequests.push({success,error,options});}},serviceWorker:{register:async()=>({})}};
+  const runtime={
+    storage:{read(key,fallback=null){try{return JSON.parse(localStorage.getItem(key)||'null')??fallback;}catch{return fallback;}},write(key,value){localStorage.setItem(key,JSON.stringify(value));return value;},remove:key=>localStorage.removeItem(key)},
+    events:{on(name,fn){const set=eventBus.get(name)||new Set();set.add(fn);eventBus.set(name,set);return()=>set.delete(fn);},emit(name,payload){for(const fn of eventBus.get(name)||[])fn(payload);}},
+    dom:{one:selector=>element(selector),require:()=>true}
+  };
+  const remember=position=>(lastPosition=position,position);
   const location={
-    supported:()=>Boolean(navigator.geolocation),
-    watch({onPosition,onError,options}={}){return navigator.geolocation.watchPosition(onPosition,onError,options);},
-    fresh(options={}){return new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:true,maximumAge:0,timeout:15000,...options}));}
+    supported:()=>Boolean(navigator.geolocation),current:()=>lastPosition,
+    watch({onPosition,onError,options}={}){return navigator.geolocation.watchPosition(position=>onPosition?.(remember(position)),onError,options);},
+    fresh(options={}){return new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(position=>resolve(remember(position)),reject,{enableHighAccuracy:true,maximumAge:0,timeout:15000,...options}));}
   };
   const win={NEXUS_TUTOR_DEFAULTS:defaults,NEXUS_TUTOR_RUNTIME:runtime,NEXUS_TUTOR_LOCATION:location,addEventListener:(name,fn)=>{windowListeners[name]=fn;}};
-  new Function('window','document','navigator','localStorage','setInterval','clearInterval','Date','console','fetch',source)(
+  const URLStub={createObjectURL:()=> 'blob:test',revokeObjectURL(){}};
+  new Function('window','document','navigator','localStorage','setInterval','clearInterval','Date','console','fetch','Blob','URL',source)(
     win,document,navigator,localStorage,
-    (fn,ms)=>{timers.set(++id,{fn,ms,next:clock+ms});return id;},key=>timers.delete(key),TestDate,{warn(){}},async()=>{throw Error('Route unavailable');}
+    (fn,ms)=>{timers.set(++id,{fn,ms,next:clock+ms});return id;},key=>timers.delete(key),TestDate,{warn(){}},async()=>{throw Error('Route unavailable');},globalThis.Blob,URLStub
   );
   const flush = async()=>{await Promise.resolve();await Promise.resolve();await Promise.resolve();await Promise.resolve();};
   return {
-    stored,timers,element,gpsRequests,win,navigator,
+    stored,timers,element,gpsRequests,win,navigator,runtime,
     focus:()=>windowListeners.focus?.(),
     visibility(state){document.visibilityState=state;return documentListeners.visibilitychange?.();},
     pageshow:()=>windowListeners.pageshow?.({persisted:true}),
@@ -160,6 +166,6 @@ async function testConnectivityAndTelemetry(source){
   return ['Online indicator','Offline indicator','Online recovery','Telemetry stored','Connectivity telemetry','Journey telemetry','Status telemetry','Telemetry fields','Download JSON control'];
 }
 
-const source=await fs.readFile(new URL('../app.js',import.meta.url),'utf8');
+const source=await fs.readFile(new URL('../features/journey.js',import.meta.url),'utf8');
 const checks=[...await testHistory(source),...await testLinearProgress(source),...await testEarlyActivationAndPolling(source),...await testResumeAndGpsLoss(source),...await testConnectivityAndTelemetry(source)];
 console.log(`Historial: ${checks.length} comprobaciones correctas.`);
