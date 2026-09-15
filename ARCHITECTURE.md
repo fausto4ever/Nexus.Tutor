@@ -29,11 +29,11 @@ Esta rama parte del commit estable `47b8524` y prioriza separación de responsab
 
 - El navegador carga las fuentes por responsabilidad: config → runtime → location → destinations → journey → UI shell.
 - Los archivos legacy duplicados `coordinates.js`, `ui.js`, `styles.css` y `ui.css` fueron retirados de esta rama.
-- El controlador del recorrido ya no toca directamente `navigator.geolocation`; `watchPosition` y `getCurrentPosition` están encapsulados en `services/location.js`.
-- `features/destinations.js` ya no depende de un listener capture antes de `app.js` y otro listener bubble después. Guardar configuración tiene un único propietario.
+- El acceso a `watchPosition` y `getCurrentPosition` está encapsulado en `services/location.js`.
+- `features/destinations.js` ya no depende de un listener capture antes de otro guardado ni de un listener bubble posterior. Guardar configuración tiene un único propietario.
 - La configuración se comunica al recorrido mediante `RUNTIME.events` (`config:changed`).
 - El arranque integrado valida IDs reales del HTML, orden real de scripts y que `Guardar cambios` y `Voy por mi hijo` tengan exactamente un propietario.
-- `app.js` dejó de formar parte del arranque y fue sustituido por `features/journey.js`.
+- El monolito `app.js` fue retirado de la rama; el recorrido vive exclusivamente en `features/journey.js`.
 
 ## Deuda aún deliberadamente conservada
 
