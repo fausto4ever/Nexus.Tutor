@@ -26,5 +26,5 @@ console.log('Duplicados principales:',duplicates.slice(0,12).map(([selector,coun
 
 assert(localStyles.length===1&&localStyles[0]==='css/nexus-tutor.css','La app debe cargar un único stylesheet local');
 assert(!html.includes('foundation.css')&&!html.includes('application.css'),'No deben reaparecer los CSS legacy');
-assert(importantCount<=156,'La deuda de !important aumentó sobre la línea base validada (156)');
+assert(importantCount<=129,'La deuda de !important aumentó sobre la línea base validada del shell (129)');
 assert(duplicates.length<=61,'Los selectores repetidos aumentaron sobre la línea base optimizada (61)');
