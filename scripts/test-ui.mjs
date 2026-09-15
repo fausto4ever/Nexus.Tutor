@@ -13,13 +13,13 @@ const ok=(condition,name)=>{assert(condition,name);checks.push(name);};
 
 ok(html.includes('CONTROL DE ACCESO · v0.1.9'),'Versión visible 0.1.9');
 const localStyles=[...html.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+\.css)"/g)].map(match=>match[1]).filter(href=>!href.startsWith('http'));
-ok(localStyles.length===1&&localStyles[0]==='css/nexus-tutor.css','Un solo stylesheet local es dueño de la interfaz');
-ok(!html.includes('css/foundation.css')&&!html.includes('css/application.css'),'CSS legacy ya no participa en la cascada');
-ok(!sw.includes('foundation.css')&&!sw.includes('application.css'),'Service worker no conserva CSS legacy');
+ok(localStyles.length===1&&localStyles[0]==='css/nexus-tutor.css','Un solo stylesheet local reservado para reconstrucción');
+ok(css.trim()==='','CSS fuente vacío');
+ok(!html.includes('css/foundation.css')&&!html.includes('css/application.css')&&!html.includes('styles.css')&&!html.includes('ui.css'),'CSS legacy ya no participa en la interfaz');
+ok(!sw.includes('foundation.css')&&!sw.includes('application.css')&&!sw.includes('styles.css')&&!sw.includes('ui.css'),'Service worker no conserva CSS legacy');
 ok(html.includes('src="ui/shell.js"'),'Shell UI modular cargado');
 ok(html.includes('src="core/runtime.js"')&&html.includes('src="services/location.js"')&&html.includes('src="features/destinations.js"')&&html.includes('src="features/journey.js"'),'Capas runtime, servicios y features cargadas');
 ok(!html.includes('src="app.js"'),'app.js monolítico ya no participa en el arranque');
-ok(html.includes('Plus+Jakarta+Sans'),'Tipografía de referencia cargada');
 ok(['tab-tracking','tab-qr','tab-notifications','tab-temp-qr'].every(id=>html.includes(`id="${id}"`)),'Cuatro pestañas presentes');
 ok(['Recorrido','Mi QR','Avisos','QR temporal'].every(label=>html.includes(`<span>${label}</span>`)),'Navegación inferior completa');
 ok(html.includes('id="connectionBadge"')&&html.indexOf('id="connectionBadge"')<html.indexOf('id="schoolLock"'),'Conectividad separada del estado del destino');
@@ -28,9 +28,7 @@ ok(['<option value="day">1 día</option>','<option value="week">1 semana</option
 ok(html.includes('Generar QR temporal · próximamente')&&html.includes('disabled>Generar QR temporal'),'QR temporal permanece deshabilitado');
 ok(ui.includes("const THEME_KEY='nexusTutorThemeV1'")&&ui.includes("prefers-color-scheme: dark")&&ui.includes('localStorage.setItem(THEME_KEY,next)'),'Tema persistente y preferencia del sistema');
 ok(ui.includes("const TAB_KEY='nexusTutorTabV1'")&&ui.includes('localStorage.setItem(TAB_KEY,next)'),'Pestaña activa persistente');
-ok(/max-width\s*:\s*480px/.test(css)&&/width\s*:\s*92px/.test(css)&&css.includes("'Plus Jakarta Sans'"),'Diseño móvil compacto respeta referencia');
-ok(/html\[data-theme=(?:"dark"|dark)\]/.test(css)&&css.includes('.bottom-nav')&&css.includes('.future-card'),'Estilos dark y navegación definidos');
-ok(sw.includes("'./css/nexus-tutor.css'")&&sw.includes("'./features/destinations.js'")&&sw.includes("'./features/journey.js'")&&sw.includes("nexus-tutor-0.1.9"),'Service worker incluye CSS único y features modulares');
+ok(sw.includes("'./css/nexus-tutor.css'")&&sw.includes("'./features/destinations.js'")&&sw.includes("'./features/journey.js'")&&sw.includes("nexus-tutor-0.1.9"),'Service worker incluye CSS vacío y features modulares');
 ok(JSON.parse(pkg).version==='0.1.9','Package version 0.1.9');
 ok(!html.includes('TUTOR-AUTH-ID-')&&!html.includes('TEMP-PASS:'),'Sin QR ficticios incrustados');
 
