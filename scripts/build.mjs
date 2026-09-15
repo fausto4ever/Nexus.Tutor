@@ -15,10 +15,7 @@ const JS_ASSETS=[
   ['features/journey.js','journey.min.js'],
   ['ui/shell.js','shell.min.js']
 ];
-const CSS_ASSETS=[
-  ['css/foundation.css','foundation.min.css'],
-  ['css/application.css','application.min.css']
-];
+const CSS_ASSETS=[['css/nexus-tutor.css','nexus-tutor.min.css']];
 
 await fs.rm(dist,{recursive:true,force:true});
 await fs.mkdir(dist,{recursive:true});
