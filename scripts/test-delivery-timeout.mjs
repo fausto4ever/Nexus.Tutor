@@ -48,7 +48,7 @@ function createHarness(sources,storedJourney=null){
     static now(){return NOW+clock;}
   }
   const win={
-    NEXUS_TUTOR_DEFAULTS:{version:'0.1.9',school:{name:'Escuela',lat:19,lng:-101},thresholds:{waitingMeters:1000,readyMeters:100,atGateMeters:20},distanceMode:'direct',refreshSeconds:30},
+    NEXUS_TUTOR_DEFAULTS:{version:'0.1.12',school:{name:'Escuela',lat:19,lng:-101},thresholds:{waitingMeters:1000,readyMeters:100,atGateMeters:20},distanceMode:'direct',refreshSeconds:30},
     NEXUS_TUTOR_RUNTIME:runtime,NEXUS_TUTOR_LOCATION:location,
     addEventListener:(name,fn)=>{windowListeners[name]=fn;}
   };
@@ -88,6 +88,21 @@ const sources={
   journey:await fs.readFile(new URL('features/journey.js',root),'utf8')
 };
 
+const timed=createHarness(sources);
+await timed.event('#manualDistanceToggle','change',{target:{checked:true}});
+timed.element('#manualDistanceInput').value='1000';
+await timed.event('#manualDistanceInput','change');
+await timed.event('#pickupBtn','click');
+await timed.advance(61000);
+assert(timed.element('#journeyElapsed').textContent==='01:01','El contador visible debe avanzar cada segundo durante el recorrido');
+timed.element('#manualDistanceInput').value='20';
+await timed.event('#manualDistanceInput','change');
+assert(timed.journey().status==='AT_GATE','El recorrido cronometrado debe poder llegar a AT_GATE');
+assert(timed.journey().travelDurationMs===61000,'AT_GATE debe congelar la duración exacta del recorrido');
+assert(timed.element('#journeyElapsed').textContent==='01:01','El contador debe mostrar la duración congelada al llegar');
+await timed.advance(60000);
+assert(timed.element('#journeyElapsed').textContent==='01:01','Los 3 minutos de espera no deben aumentar el tiempo de recorrido');
+
 const active=createHarness(sources);
 await active.event('#manualDistanceToggle','change',{target:{checked:true}});
 active.element('#manualDistanceInput').value='20';
@@ -95,11 +110,13 @@ await active.event('#manualDistanceInput','change');
 await active.event('#pickupBtn','click');
 assert(active.journey().status==='AT_GATE','Un recorrido iniciado en puerta debe quedar AT_GATE');
 assert(Number.isFinite(Date.parse(active.journey().atGateAt||'')),'AT_GATE debe guardar atGateAt');
+assert(active.journey().travelDurationMs===0,'Un recorrido iniciado ya en puerta debe congelar duración en cero');
 await active.advance(179000);
 assert(active.journey().status==='AT_GATE','La espera debe mantenerse durante los primeros 2:59');
 await active.advance(1000);
 assert(active.journey().status==='COMPLETED','La espera debe completarse automáticamente a los 3 minutos');
 assert(active.journey().completedAutomatically===true,'La finalización por espera debe marcarse automática');
+assert(active.element('#statusMessage').textContent.includes('Llegaste en 0 s'),'COMPLETED debe incluir la duración final del recorrido');
 assert(active.telemetry().some(item=>item.event==='DELIVERY_COMPLETED'&&item.automatic===true&&item.waitSeconds===180),'La finalización automática debe quedar registrada');
 
 const oldAtGateAt=new Date(NOW-4*60*1000).toISOString();
@@ -110,6 +127,9 @@ const recovered=createHarness(sources,{
 });
 assert(recovered.journey().status==='COMPLETED','Al recuperar AT_GATE vencido debe completarse inmediatamente');
 assert(recovered.journey().completedAutomatically===true,'La recuperación vencida debe conservar finalización automática');
+assert(recovered.journey().travelDurationMs===26*60*1000,'La recuperación debe reconstruir y congelar el tiempo hasta AT_GATE');
+assert(recovered.element('#journeyElapsed').textContent==='26:00','La duración recuperada debe seguir visible');
+assert(recovered.element('#statusMessage').textContent.includes('Llegaste en 26 min 0 s'),'El mensaje completado debe usar el tiempo recuperado');
 assert(recovered.telemetry().some(item=>item.event==='DELIVERY_WAIT_ELAPSED'&&item.reason==='startup'),'La recuperación debe registrar que la espera venció durante el cierre');
 
 const legacy=createHarness(sources,{
@@ -119,5 +139,6 @@ const legacy=createHarness(sources,{
 });
 assert(legacy.journey().status==='AT_GATE','Un AT_GATE antiguo sin atGateAt no debe completarse retroactivamente');
 assert(Number.isFinite(Date.parse(legacy.journey().atGateAt||'')),'Un AT_GATE legado debe iniciar su espera de 3 minutos al migrar');
+assert(legacy.journey().travelDurationMs===30*60*1000,'Un AT_GATE legado debe congelar el tiempo acumulado al migrar');
 
-console.log('Entrega automática: espera AT_GATE de 3 minutos y recuperación verificadas.');
+console.log('Entrega automática: contador hasta AT_GATE, espera de 3 minutos y recuperación verificadas.');
