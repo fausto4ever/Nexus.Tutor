@@ -27,6 +27,15 @@
     const startedAt=Date.parse(item.startedAt||'');
     return !Number.isFinite(startedAt)||now-startedAt>=JOURNEY_TTL_MS;
   }
+  function calculateTravelDuration(item,now=Date.now()){
+    const stored=Number(item?.travelDurationMs);
+    if(Number.isFinite(stored)&&stored>=0)return stored;
+    const startedAt=Date.parse(item?.startedAt||'');
+    if(!Number.isFinite(startedAt))return 0;
+    const atGateAt=Date.parse(item?.atGateAt||'');
+    const frozen=(item?.status==='AT_GATE'||item?.status==='COMPLETED')&&Number.isFinite(atGateAt);
+    return Math.max(0,(frozen?atGateAt:now)-startedAt);
+  }
 
   let config=loadConfig();
   const storedJourney=loadJourney();
@@ -38,6 +47,13 @@
   if(!expiredJourneyAtStartup&&journey.active&&journey.status==='AT_GATE'&&!Number.isFinite(Date.parse(journey.atGateAt||''))){
     journey.atGateAt=new Date().toISOString();
     RUNTIME.storage.write(JOURNEY_KEY,journey);
+  }
+  if(!expiredJourneyAtStartup&&(journey.status==='AT_GATE'||journey.status==='COMPLETED')&&!Number.isFinite(Number(journey.travelDurationMs))){
+    const startedAt=Date.parse(journey.startedAt||''),atGateAt=Date.parse(journey.atGateAt||'');
+    if(Number.isFinite(startedAt)&&Number.isFinite(atGateAt)){
+      journey.travelDurationMs=Math.max(0,atGateAt-startedAt);
+      RUNTIME.storage.write(JOURNEY_KEY,journey);
+    }
   }
   const recoveredActiveAtStartup=Boolean(journey.active&&journey.status!=='COMPLETED');
   function saveJourney(){RUNTIME.storage.write(JOURNEY_KEY,journey);}
@@ -62,17 +78,23 @@
     return null;
   }
   function telemetrySnapshot(){
-    const coords=currentPosition?.coords||{};
     return{
       journeyId:journey.id||null,journeyStatus:journey.status||'OUTSIDE',measurementState,
       distanceMeters:Number.isFinite(latestDistance)?latestDistance:null,accuracyMeters:Number.isFinite(latestAccuracy)?latestAccuracy:null,source:latestSource,
-      pollIntervalSeconds:journey.active?pollSecondsForStatus():null,visibility:document.visibilityState||'visible',online:onlineState,
-      latitude:Number.isFinite(coords.latitude)?coords.latitude:null,longitude:Number.isFinite(coords.longitude)?coords.longitude:null
+      pollIntervalSeconds:journey.active?pollSecondsForStatus():null,visibility:document.visibilityState||'visible',online:onlineState
     };
   }
   function recordTelemetry(event,extra={}){TELEMETRY.record(event,{...telemetrySnapshot(),...extra});}
   function addLog(status,message,distance){VIEW.renderLog(TELEMETRY.addLog(status,message,distance));}
   function renderLog(){VIEW.renderLog(TELEMETRY.loadLog());}
+  function updateElapsedDisplay(){VIEW.setJourneyElapsed(journey.active?calculateTravelDuration(journey):0);}
+  function freezeTravelDuration(){
+    const startedAt=Date.parse(journey.startedAt||''),atGateAt=Date.parse(journey.atGateAt||'');
+    if(!Number.isFinite(startedAt)||!Number.isFinite(atGateAt))return null;
+    const duration=Math.max(0,atGateAt-startedAt);
+    journey.travelDurationMs=duration;
+    return duration;
+  }
 
   function candidateStatus(distance){
     const thresholds=config.thresholds;
@@ -85,6 +107,7 @@
     const rawStatus=Number.isFinite(latestDistance)?candidateStatus(latestDistance):'OUTSIDE';
     const freshEnough=manualDistanceEnabled||measurementState==='FRESH';
     const canStart=schoolReady()&&(manualDistanceEnabled||currentPosition)&&Number.isFinite(latestDistance)&&freshEnough;
+    updateElapsedDisplay();
     VIEW.render({config,journey,currentPosition,latestDistance,latestSource,latestAccuracy,measurementState,manualDistanceEnabled,manualDistance,onlineState,schoolReady:schoolReady(),rawStatus,canStart});
   }
 
@@ -106,8 +129,11 @@
   }
   function ensureAtGateTimestamp(){
     if(!journey.active||journey.status!=='AT_GATE')return false;
-    if(Number.isFinite(Date.parse(journey.atGateAt||'')))return true;
-    journey.atGateAt=new Date().toISOString();saveJourney();return true;
+    if(Number.isFinite(Date.parse(journey.atGateAt||''))){
+      if(!Number.isFinite(Number(journey.travelDurationMs))){freezeTravelDuration();saveJourney();}
+      return true;
+    }
+    journey.atGateAt=new Date().toISOString();freezeTravelDuration();saveJourney();return true;
   }
   function deliveryRemainingMs(now=Date.now()){
     if(!journey.active||journey.status!=='AT_GATE')return null;
@@ -120,8 +146,11 @@
     const current=journey.status||'OUTSIDE';
     if((STATUS_RANK[candidate]||0)>(STATUS_RANK[current]||0)){
       journey.status=candidate;
-      if(candidate==='AT_GATE'&&!Number.isFinite(Date.parse(journey.atGateAt||'')))journey.atGateAt=new Date().toISOString();
-      saveJourney();addLog(candidate,manualDistanceEnabled?'Avance por simulación manual':'Avance automático',distance);recordTelemetry('STATUS_CHANGED',{fromStatus:current,toStatus:candidate,distanceMeters:distance});
+      if(candidate==='AT_GATE'){
+        if(!Number.isFinite(Date.parse(journey.atGateAt||'')))journey.atGateAt=new Date().toISOString();
+        freezeTravelDuration();
+      }
+      saveJourney();addLog(candidate,manualDistanceEnabled?'Avance por simulación manual':'Avance automático',distance);recordTelemetry('STATUS_CHANGED',{fromStatus:current,toStatus:candidate,distanceMeters:distance,travelDurationMs:candidate==='AT_GATE'?journey.travelDurationMs:null});
       if(document.visibilityState!=='hidden')startRefreshLoop();
     }
   }
@@ -149,28 +178,29 @@
   function startJourney(){
     if(els.pickupBtn.disabled||journey.active)return;
     const initialStatus=candidateStatus(latestDistance),startedAt=new Date().toISOString();
-    journey={active:true,id:`journey-${Date.now()}`,status:initialStatus,startedAt,atGateAt:initialStatus==='AT_GATE'?startedAt:null,lastCheckedAt:journey.lastCheckedAt||null,lastDistance:latestDistance,lastSource:latestSource,lastAccuracy:latestAccuracy};saveJourney();
+    journey={active:true,id:`journey-${Date.now()}`,status:initialStatus,startedAt,atGateAt:initialStatus==='AT_GATE'?startedAt:null,travelDurationMs:initialStatus==='AT_GATE'?0:null,lastCheckedAt:journey.lastCheckedAt||null,lastDistance:latestDistance,lastSource:latestSource,lastAccuracy:latestAccuracy};saveJourney();
     addLog(initialStatus,initialStatus==='OUTSIDE'?'Trayecto iniciado · lejos del destino':manualDistanceEnabled?'Inicio de prueba manual':'Inicio de prueba',latestDistance);recordTelemetry('JOURNEY_STARTED',{distanceMeters:latestDistance});refreshMeasurement({allowPromotion:true});startRefreshLoop();render();
   }
   function completeJourney(options={}){
     if(!journey.active||journey.status==='COMPLETED')return;
     const automatic=Boolean(options?.automatic),from=journey.status;
+    if(from==='AT_GATE'&&!Number.isFinite(Number(journey.travelDurationMs)))freezeTravelDuration();
     journey.status='COMPLETED';journey.completedAt=new Date().toISOString();journey.completedAutomatically=automatic;saveJourney();stopRefreshLoop();
     addLog('COMPLETED',automatic?'Solicitud completada automáticamente después de 3 min en puerta':'Solicitud completada',latestDistance);
-    recordTelemetry('DELIVERY_COMPLETED',{fromStatus:from,automatic,waitSeconds:automatic?DELIVERY_WAIT_MS/1000:null,atGateAt:journey.atGateAt||null});render();
+    recordTelemetry('DELIVERY_COMPLETED',{fromStatus:from,automatic,waitSeconds:automatic?DELIVERY_WAIT_MS/1000:null,atGateAt:journey.atGateAt||null,travelDurationMs:Number.isFinite(Number(journey.travelDurationMs))?Number(journey.travelDurationMs):null});render();
   }
   function completeDeliveryIfDue(reason='delivery-timeout'){
     if(!journey.active||journey.status!=='AT_GATE')return false;
     const remaining=deliveryRemainingMs();
     if(remaining===null||remaining>0)return false;
-    recordTelemetry('DELIVERY_WAIT_ELAPSED',{reason,waitSeconds:DELIVERY_WAIT_MS/1000,atGateAt:journey.atGateAt||null});
+    recordTelemetry('DELIVERY_WAIT_ELAPSED',{reason,waitSeconds:DELIVERY_WAIT_MS/1000,atGateAt:journey.atGateAt||null,travelDurationMs:Number.isFinite(Number(journey.travelDurationMs))?Number(journey.travelDurationMs):null});
     completeJourney({automatic:true});return true;
   }
-  function resetJourney(){recordTelemetry('JOURNEY_RESET');journey={active:false,status:'OUTSIDE',startedAt:null,lastCheckedAt:journey.lastCheckedAt||null,lastDistance:latestDistance,lastSource:latestSource,lastAccuracy:latestAccuracy};saveJourney();stopRefreshLoop();if((currentPosition||manualDistanceEnabled)&&schoolReady())refreshMeasurement({allowPromotion:false});else render();}
+  function resetJourney(){recordTelemetry('JOURNEY_RESET');journey={active:false,status:'OUTSIDE',startedAt:null,travelDurationMs:null,lastCheckedAt:journey.lastCheckedAt||null,lastDistance:latestDistance,lastSource:latestSource,lastAccuracy:latestAccuracy};saveJourney();stopRefreshLoop();if((currentPosition||manualDistanceEnabled)&&schoolReady())refreshMeasurement({allowPromotion:false});else render();}
   function expireJourneyIfNeeded(reason='ttl-check'){
     if(!isJourneyExpired(journey))return false;
     const previous={id:journey.id||null,status:journey.status||'OUTSIDE',startedAt:journey.startedAt||null};
-    journey={active:false,status:'OUTSIDE',startedAt:null,lastCheckedAt:journey.lastCheckedAt||null,lastDistance:latestDistance,lastSource:latestSource,lastAccuracy:latestAccuracy,expiredAt:new Date().toISOString()};
+    journey={active:false,status:'OUTSIDE',startedAt:null,travelDurationMs:null,lastCheckedAt:journey.lastCheckedAt||null,lastDistance:latestDistance,lastSource:latestSource,lastAccuracy:latestAccuracy,expiredAt:new Date().toISOString()};
     saveJourney();measurementRevision++;measurementState=Number.isFinite(latestDistance)?'STALE':'UNAVAILABLE';stopRefreshLoop();
     addLog('OUTSIDE','Recorrido vencido después de 12 horas',latestDistance);
     recordTelemetry('JOURNEY_EXPIRED',{reason,ttlHours:12,previousJourneyId:previous.id,previousStatus:previous.status,previousStartedAt:previous.startedAt});render();
@@ -188,14 +218,15 @@
     },seconds*1000);
     countdownTimer=setInterval(updateCountdown,1000);recordTelemetry('POLL_RATE_CHANGED',{pollIntervalSeconds:seconds});updateCountdown();
   }
-  function stopRefreshLoop(){clearInterval(refreshTimer);clearInterval(countdownTimer);refreshTimer=countdownTimer=null;nextRefreshAt=null;VIEW.setCountdown('—');}
+  function stopRefreshLoop(){clearInterval(refreshTimer);clearInterval(countdownTimer);refreshTimer=countdownTimer=null;nextRefreshAt=null;VIEW.setCountdown('—');updateElapsedDisplay();}
   function updateCountdown(){
+    updateElapsedDisplay();
     if(completeDeliveryIfDue('delivery-countdown'))return;
     VIEW.setCountdown(nextRefreshAt?`${Math.max(0,Math.ceil((nextRefreshAt-Date.now())/1000))} s`:'—');
   }
   function setManualDistanceEnabled(enabled){
     measurementRevision++;manualDistanceEnabled=Boolean(enabled);
-    if(manualDistanceEnabled){syncManualControls();latestDistance=manualDistance;latestSource='manual';latestAccuracy=null;measurementState='FRESH';journey.lastCheckedAt=new Date().toISOString();journey.lastDistance=latestDistance;journey.lastSource=latestSource;journey.lastAccuracy=null;saveJourney();if(journey.active)promoteStatus(candidateStatus(latestDistance),latestDistance);recordTelemetry('MANUAL_MODE_ON');render();}
+    if(manualDistanceEnabled){syncManualControls();latestDistance=manualDistance;latestSource='manual';latestAccuracy=null;measurementState='FRESH';journey.lastCheckedAt=new Date().toISOString();journey.lastDistance=latestDistance;journey.lastSource='manual';journey.lastAccuracy=null;saveJourney();if(journey.active)promoteStatus(candidateStatus(latestDistance),latestDistance);recordTelemetry('MANUAL_MODE_ON');render();}
     else{measurementState=Number.isFinite(latestDistance)?'STALE':'UNAVAILABLE';latestSource=journey.lastSource||'direct';recordTelemetry('MANUAL_MODE_OFF');render();if(currentPosition&&schoolReady())refreshMeasurement({allowPromotion:journey.active});}
   }
 
