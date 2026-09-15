@@ -15,6 +15,7 @@ ok(html.includes('CONTROL DE ACCESO · v0.1.9'),'Versión visible 0.1.9');
 const localStyles=[...html.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+\.css)"/g)].map(match=>match[1]).filter(href=>!href.startsWith('http'));
 ok(localStyles.length===1&&localStyles[0]==='css/nexus-tutor.css','Un solo stylesheet local es dueño de la interfaz');
 ok(!html.includes('css/foundation.css')&&!html.includes('css/application.css'),'CSS legacy ya no participa en la cascada');
+ok(!sw.includes('foundation.css')&&!sw.includes('application.css'),'Service worker no conserva CSS legacy');
 ok(html.includes('src="ui/shell.js"'),'Shell UI modular cargado');
 ok(html.includes('src="core/runtime.js"')&&html.includes('src="services/location.js"')&&html.includes('src="features/destinations.js"')&&html.includes('src="features/journey.js"'),'Capas runtime, servicios y features cargadas');
 ok(!html.includes('src="app.js"'),'app.js monolítico ya no participa en el arranque');
