@@ -39,7 +39,7 @@
   let measurementState=Number.isFinite(latestDistance)?'STALE':'UNAVAILABLE';
   let manualDistanceEnabled=false;
   let manualDistance=Math.max(0,Number(config.thresholds?.waitingMeters)||1000);
-  let refreshTimer=null,countdownTimer=null,nextRefreshAt=null;
+  let refreshTimer=null,countdownTimer=null,nextRefreshAt=null,refreshInFlight=false;
   let resumeRun=null,lastResumeAt=-Infinity,measurementRevision=0;
   let onlineState=navigator.onLine!==false;
 
@@ -89,10 +89,13 @@
   function linearPercent(distance){const max=Math.max(1,Number(config.thresholds.waitingMeters)||1);return Math.max(0,Math.min(100,100-(Number(distance)/max*100)));}
   function positionMarkers(){
     const max=Math.max(1,Number(config.thresholds.waitingMeters)||1);
-    const place=(element,distance,edge=false)=>{const pct=Math.max(0,Math.min(100,100-(Number(distance)/max*100)));element.style.left=`${pct}%`;element.style.transform=edge?'translateX(0)':'translateX(-50%)';};
-    place(els.waitingMarker,config.thresholds.waitingMeters,true);place(els.readyMarker,config.thresholds.readyMeters);place(els.gateMarker,config.thresholds.atGateMeters);
+    const place=(element,distance)=>{const pct=Math.max(0,Math.min(100,100-(Number(distance)/max*100)));element.style.left=`${pct}%`;};
+    place(els.waitingMarker,config.thresholds.waitingMeters);place(els.readyMarker,config.thresholds.readyMeters);place(els.gateMarker,config.thresholds.atGateMeters);
   }
-  function renderConnection(){els.connectionBadge.textContent=onlineState?'● En línea':'● Sin internet';els.connectionBadge.className=`badge ${onlineState?'badge-ok':'badge-warn'}`;}
+  function renderConnection(){
+    els.connectionBadge.textContent=onlineState?'● En línea':'● Sin internet';
+    els.connectionBadge.className=`badge connection-badge ${onlineState?'badge-ok':'badge-warn'}`;
+  }
 
   function manualStep(){const step=Number(els.manualDistanceStep.value);return[1,10,100,1000].includes(step)?step:10;}
   function syncManualControls(){
@@ -119,12 +122,21 @@
     const {latitude,longitude,accuracy}=currentPosition.coords;
     const direct=haversine(latitude,longitude,Number(config.school.lat),Number(config.school.lng));
     if(config.distanceMode!=='driving')return{meters:direct,source:'direct',accuracy:Number.isFinite(accuracy)?accuracy:null};
+    let timeoutId=null;
     try{
       const url=`https://router.project-osrm.org/route/v1/driving/${longitude},${latitude};${config.school.lng},${config.school.lat}?overview=false&steps=false`;
-      const response=await fetch(url,{cache:'no-store'});if(!response.ok)throw new Error('ROUTE_HTTP_'+response.status);
+      const controller=typeof AbortController==='function'?new AbortController():null;
+      if(controller)timeoutId=setTimeout(()=>controller.abort(),8000);
+      const response=await fetch(url,{cache:'no-store',...(controller?{signal:controller.signal}:{})});
+      if(!response.ok)throw new Error('ROUTE_HTTP_'+response.status);
       const data=await response.json(),meters=Number(data?.routes?.[0]?.distance);if(!Number.isFinite(meters))throw new Error('ROUTE_DISTANCE_INVALID');
       return{meters,source:'driving',accuracy:Number.isFinite(accuracy)?accuracy:null};
-    }catch(error){console.warn('OSRM no disponible, usando distancia directa',error);return{meters:direct,source:'direct-fallback',accuracy:Number.isFinite(accuracy)?accuracy:null};}
+    }catch(error){
+      console.warn('OSRM no disponible, usando distancia directa',error);
+      return{meters:direct,source:'direct-fallback',accuracy:Number.isFinite(accuracy)?accuracy:null};
+    }finally{
+      if(timeoutId!=null)clearTimeout(timeoutId);
+    }
   }
   function promoteStatus(candidate,distance){
     if(!journey.active||journey.status==='COMPLETED')return;
@@ -192,7 +204,7 @@
 
   function startJourney(){
     if(els.pickupBtn.disabled||journey.active)return;
-    const initialStatus=candidateStatus(latestDistance)==='OUTSIDE'?'OUTSIDE':'WAITING';
+    const initialStatus=candidateStatus(latestDistance);
     journey={active:true,id:`journey-${Date.now()}`,status:initialStatus,startedAt:new Date().toISOString(),lastCheckedAt:journey.lastCheckedAt||null,lastDistance:latestDistance,lastSource:latestSource,lastAccuracy:latestAccuracy};saveJourney();
     addLog(initialStatus,initialStatus==='OUTSIDE'?'Trayecto iniciado · lejos del destino':manualDistanceEnabled?'Inicio de prueba manual':'Inicio de prueba',latestDistance);recordTelemetry('JOURNEY_STARTED',{distanceMeters:latestDistance});refreshMeasurement({allowPromotion:true});startRefreshLoop();render();
   }
@@ -202,7 +214,12 @@
     stopRefreshLoop();if(!journey.active||journey.status==='COMPLETED')return;
     const seconds=pollSecondsForStatus();if(!seconds)return;
     nextRefreshAt=Date.now()+seconds*1000;
-    refreshTimer=setInterval(async()=>{await refreshMeasurement({allowPromotion:true,recordMeasurement:true});if(refreshTimer)nextRefreshAt=Date.now()+pollSecondsForStatus()*1000;},seconds*1000);
+    refreshTimer=setInterval(async()=>{
+      if(refreshInFlight)return;
+      refreshInFlight=true;
+      try{await refreshMeasurement({allowPromotion:true,recordMeasurement:true});}
+      finally{refreshInFlight=false;if(refreshTimer)nextRefreshAt=Date.now()+pollSecondsForStatus()*1000;}
+    },seconds*1000);
     countdownTimer=setInterval(updateCountdown,1000);recordTelemetry('POLL_RATE_CHANGED',{pollIntervalSeconds:seconds});updateCountdown();
   }
   function stopRefreshLoop(){clearInterval(refreshTimer);clearInterval(countdownTimer);refreshTimer=countdownTimer=null;nextRefreshAt=null;els.countdown.textContent='—';}
