@@ -15,7 +15,7 @@ const [html,ui,css,sw,pkg,journey,distance,telemetry,journeyView]=await Promise.
 const checks=[];
 const ok=(condition,name)=>{assert(condition,name);checks.push(name);};
 
-ok(html.includes('CONTROL DE ACCESO · v0.1.9'),'Versión visible 0.1.9');
+ok(html.includes('CONTROL DE ACCESO · v0.1.10'),'Versión visible 0.1.10');
 const localStyles=[...html.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+\.css)"/g)].map(match=>match[1]).filter(href=>!href.startsWith('http'));
 ok(localStyles.length===1&&localStyles[0]==='css/nexus-tutor.css','Un solo stylesheet local es dueño de la interfaz');
 ok(css.trim().length>0,'Nueva base CSS cargada');
@@ -37,12 +37,12 @@ ok(html.includes('Generar QR temporal · próximamente')&&html.includes('disable
 ok(ui.includes("const THEME_KEY='nexusTutorThemeV1'")&&ui.includes("prefers-color-scheme: dark")&&ui.includes('localStorage.setItem(THEME_KEY,next)'),'Tema persistente y preferencia del sistema');
 ok(ui.includes("addEventListener?.('change'")&&ui.includes('if(!storedTheme())'),'Tema del sistema se sigue mientras no exista preferencia manual');
 ok(ui.includes("const TAB_KEY='nexusTutorTabV1'")&&ui.includes('localStorage.setItem(TAB_KEY,next)'),'Pestaña activa persistente');
-ok(sw.includes("'./css/nexus-tutor.css'")&&sw.includes("'./services/distance.js'")&&sw.includes("'./services/telemetry.js'")&&sw.includes("'./ui/journey-view.js'")&&sw.includes("'./features/journey.js'")&&sw.includes("nexus-tutor-0.1.9"),'Service worker incluye módulos del recorrido');
+ok(sw.includes("'./css/nexus-tutor.css'")&&sw.includes("'./services/distance.js'")&&sw.includes("'./services/telemetry.js'")&&sw.includes("'./ui/journey-view.js'")&&sw.includes("'./features/journey.js'")&&sw.includes("nexus-tutor-0.1.10"),'Service worker incluye módulos del recorrido');
 ok(distance.includes('function haversine')&&distance.includes('router.project-osrm.org'),'Cálculo de distancia pertenece al servicio dedicado');
 ok(telemetry.includes("const LOG_KEY='nexusTutorLogV1'")&&telemetry.includes('function record('),'Historial y telemetría pertenecen al servicio dedicado');
 ok(journeyView.includes('function render(model)')&&journeyView.includes('function renderLog(items)'),'Render del recorrido pertenece a su vista');
 ok(!journey.includes('function haversine')&&!journey.includes('router.project-osrm.org')&&!journey.includes('eventLog.innerHTML'),'Journey coordina sin reabsorber distancia ni render del historial');
-ok(JSON.parse(pkg).version==='0.1.9','Package version 0.1.9');
+ok(JSON.parse(pkg).version==='0.1.10','Package version 0.1.10');
 ok(!html.includes('TUTOR-AUTH-ID-')&&!html.includes('TEMP-PASS:'),'Sin QR ficticios incrustados');
 
 console.log(`UI: ${checks.length} comprobaciones correctas.`);
