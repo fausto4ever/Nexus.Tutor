@@ -6,13 +6,13 @@
 
   RUNTIME.dom.require([
     '#schoolName','#schoolLock','#schoolCoords','#connectionBadge','#distanceValue','#distanceUnit','#gpsBadge','#wakeLockBadge','#accuracyValue','#distanceSource','#distanceProgress',
-    '#waitingMarker','#readyMarker','#gateMarker','#waitingLabel','#readyLabel','#gateLabel','#statusPill','#statusMessage','#countdown','#lastUpdate',
+    '#waitingMarker','#readyMarker','#gateMarker','#waitingLabel','#readyLabel','#gateLabel','#statusPill','#statusMessage','#journeyElapsed','#countdown','#lastUpdate',
     '#pickupBtn','#pickupBtnText','#actionHint','#resetJourneyBtn','#eventLog','#clearLogBtn','#downloadTelemetryBtn',
     '#manualDistanceToggle','#manualDistanceControls','#manualDistanceInput','#manualDistanceMinus','#manualDistancePlus','#manualDistanceStep'
   ]);
 
   const elements={
-    schoolName:$('#schoolName'),schoolLock:$('#schoolLock'),schoolCoords:$('#schoolCoords'),connectionBadge:$('#connectionBadge'),distanceValue:$('#distanceValue'),distanceUnit:$('#distanceUnit'),gpsBadge:$('#gpsBadge'),wakeLockBadge:$('#wakeLockBadge'),accuracyValue:$('#accuracyValue'),distanceSource:$('#distanceSource'),distanceProgress:$('#distanceProgress'),waitingMarker:$('#waitingMarker'),readyMarker:$('#readyMarker'),gateMarker:$('#gateMarker'),waitingLabel:$('#waitingLabel'),readyLabel:$('#readyLabel'),gateLabel:$('#gateLabel'),statusPill:$('#statusPill'),statusMessage:$('#statusMessage'),countdown:$('#countdown'),lastUpdate:$('#lastUpdate'),pickupBtn:$('#pickupBtn'),pickupBtnText:$('#pickupBtnText'),actionHint:$('#actionHint'),resetJourneyBtn:$('#resetJourneyBtn'),eventLog:$('#eventLog'),clearLogBtn:$('#clearLogBtn'),downloadTelemetryBtn:$('#downloadTelemetryBtn'),manualDistanceToggle:$('#manualDistanceToggle'),manualDistanceControls:$('#manualDistanceControls'),manualDistanceInput:$('#manualDistanceInput'),manualDistanceMinus:$('#manualDistanceMinus'),manualDistancePlus:$('#manualDistancePlus'),manualDistanceStep:$('#manualDistanceStep')
+    schoolName:$('#schoolName'),schoolLock:$('#schoolLock'),schoolCoords:$('#schoolCoords'),connectionBadge:$('#connectionBadge'),distanceValue:$('#distanceValue'),distanceUnit:$('#distanceUnit'),gpsBadge:$('#gpsBadge'),wakeLockBadge:$('#wakeLockBadge'),accuracyValue:$('#accuracyValue'),distanceSource:$('#distanceSource'),distanceProgress:$('#distanceProgress'),waitingMarker:$('#waitingMarker'),readyMarker:$('#readyMarker'),gateMarker:$('#gateMarker'),waitingLabel:$('#waitingLabel'),readyLabel:$('#readyLabel'),gateLabel:$('#gateLabel'),statusPill:$('#statusPill'),statusMessage:$('#statusMessage'),journeyElapsed:$('#journeyElapsed'),countdown:$('#countdown'),lastUpdate:$('#lastUpdate'),pickupBtn:$('#pickupBtn'),pickupBtnText:$('#pickupBtnText'),actionHint:$('#actionHint'),resetJourneyBtn:$('#resetJourneyBtn'),eventLog:$('#eventLog'),clearLogBtn:$('#clearLogBtn'),downloadTelemetryBtn:$('#downloadTelemetryBtn'),manualDistanceToggle:$('#manualDistanceToggle'),manualDistanceControls:$('#manualDistanceControls'),manualDistanceInput:$('#manualDistanceInput'),manualDistanceMinus:$('#manualDistanceMinus'),manualDistancePlus:$('#manualDistancePlus'),manualDistanceStep:$('#manualDistanceStep')
   };
 
   let wakeLock=null,wakeLockRequest=null,wakeLockState=('wakeLock'in navigator&&typeof navigator.wakeLock?.request==='function')?'INACTIVE':'UNSUPPORTED';
@@ -22,6 +22,21 @@
     if(!Number.isFinite(Number(value)))return'—';
     const meters=Number(value);
     return meters>=1000?`${(meters/1000).toFixed(meters>=10000?0:1)} km`:`${Math.round(meters)} m`;
+  }
+  function formatElapsed(value){
+    const milliseconds=Number(value);
+    if(!Number.isFinite(milliseconds)||milliseconds<0)return'00:00';
+    const totalSeconds=Math.floor(milliseconds/1000),seconds=totalSeconds%60,totalMinutes=Math.floor(totalSeconds/60),minutes=totalMinutes%60,hours=Math.floor(totalMinutes/60);
+    const pad=value=>String(value).padStart(2,'0');
+    return hours>0?`${hours}:${pad(minutes)}:${pad(seconds)}`:`${pad(totalMinutes)}:${pad(seconds)}`;
+  }
+  function formatElapsedWords(value){
+    const milliseconds=Number(value);
+    if(!Number.isFinite(milliseconds)||milliseconds<0)return null;
+    const totalSeconds=Math.floor(milliseconds/1000),seconds=totalSeconds%60,totalMinutes=Math.floor(totalSeconds/60),minutes=totalMinutes%60,hours=Math.floor(totalMinutes/60);
+    if(hours>0)return`${hours} h ${minutes} min ${seconds} s`;
+    if(totalMinutes>0)return`${totalMinutes} min ${seconds} s`;
+    return`${seconds} s`;
   }
   function progressPercent(distance,waitingMeters){
     const max=Math.max(1,Number(waitingMeters)||1);
@@ -58,6 +73,7 @@
     elements.manualDistanceMinus.setAttribute('aria-label',`Restar ${step} metros`);
     elements.manualDistancePlus.setAttribute('aria-label',`Sumar ${step} metros`);
   }
+  function setJourneyElapsed(value){elements.journeyElapsed.textContent=formatElapsed(value);}
   function setCountdown(value){elements.countdown.textContent=value;}
   function setActionHint(value){elements.actionHint.textContent=value;}
 
@@ -192,7 +208,9 @@
     elements.pickupBtn.setAttribute('data-state',journey.active?(status==='COMPLETED'?'AT_GATE':status):'IDLE');
 
     if(journey.active){
-      const messages={OUTSIDE:'Aún te encuentras muy lejos del destino. Tu trayecto ya está activo; te avisaremos cuando estés cerca.',WAITING:'Ya estás dentro del rango de espera. Seguimos tu llegada.',READY:'Ya estás muy cerca del destino. Prepárate para la entrega.',AT_GATE:'Has llegado. Esperando la entrega del alumno.',COMPLETED:'Solicitud completada. ¡Que tengas un excelente día! Que les vaya muy bien.'};
+      const elapsedWords=formatElapsedWords(journey.travelDurationMs);
+      const completedMessage=elapsedWords?`Solicitud completada. Llegaste en ${elapsedWords}. ¡Que tengan un excelente día!`:'Solicitud completada. ¡Que tengan un excelente día!';
+      const messages={OUTSIDE:'Aún te encuentras muy lejos del destino. Tu trayecto ya está activo; te avisaremos cuando estés cerca.',WAITING:'Ya estás dentro del rango de espera. Seguimos tu llegada.',READY:'Ya estás muy cerca del destino. Prepárate para la entrega.',AT_GATE:'Has llegado. Esperando la entrega del alumno.',COMPLETED:completedMessage};
       const freshness=measurementState==='RECALCULATING'?' Recalculando ubicación con la última distancia visible.':measurementState==='UNAVAILABLE'?' GPS no disponible; se conserva la última distancia conocida.':'';
       elements.statusMessage.textContent=(messages[status]||'Trayecto activo.')+freshness;
       elements.pickupBtn.disabled=true;elements.pickupBtn.classList.add('is-active');
@@ -208,5 +226,5 @@
     elements.lastUpdate.textContent=journey.lastCheckedAt?new Date(journey.lastCheckedAt).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—';
   }
 
-  window.NEXUS_TUTOR_JOURNEY_VIEW={elements,render,renderLog,renderConnection,manualStep,manualInput,syncManualControls,setCountdown,setActionHint,formatDistance};
+  window.NEXUS_TUTOR_JOURNEY_VIEW={elements,render,renderLog,renderConnection,manualStep,manualInput,syncManualControls,setJourneyElapsed,setCountdown,setActionHint,formatDistance,formatElapsed,formatElapsedWords};
 })();
