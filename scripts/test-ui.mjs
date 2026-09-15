@@ -13,8 +13,12 @@ const ok=(condition,name)=>{assert(condition,name);checks.push(name);};
 
 ok(html.includes('CONTROL DE ACCESO · v0.1.9'),'Versión visible 0.1.9');
 const localStyles=[...html.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+\.css)"/g)].map(match=>match[1]).filter(href=>!href.startsWith('http'));
-ok(localStyles.length===1&&localStyles[0]==='css/nexus-tutor.css','Un solo stylesheet local reservado para reconstrucción');
-ok(css.trim()==='','CSS fuente vacío');
+ok(localStyles.length===1&&localStyles[0]==='css/nexus-tutor.css','Un solo stylesheet local es dueño de la interfaz');
+ok(css.trim().length>0,'Nueva base CSS cargada');
+ok(!css.includes('!important'),'Nueva base CSS sin !important');
+ok(css.includes('max-width: 500px')&&css.includes('width: 160px'),'Diseño móvil base de 500px y acción principal definida');
+ok(css.includes('[data-theme="dark"]')&&css.includes('.bottom-nav')&&css.includes('.future-card'),'Tema oscuro y componentes principales definidos');
+ok(css.includes('@media (prefers-reduced-motion: reduce)')&&css.includes(':focus-visible'),'Accesibilidad visual y movimiento reducido definidos');
 ok(!html.includes('css/foundation.css')&&!html.includes('css/application.css')&&!html.includes('styles.css')&&!html.includes('ui.css'),'CSS legacy ya no participa en la interfaz');
 ok(!sw.includes('foundation.css')&&!sw.includes('application.css')&&!sw.includes('styles.css')&&!sw.includes('ui.css'),'Service worker no conserva CSS legacy');
 ok(html.includes('src="ui/shell.js"'),'Shell UI modular cargado');
@@ -27,8 +31,9 @@ ok(html.includes('Reiniciar recorrido')&&!html.includes('id="resetJourneyBtn" cl
 ok(['<option value="day">1 día</option>','<option value="week">1 semana</option>','<option value="month">1 mes</option>'].every(value=>html.includes(value)),'Vigencias QR temporal preparadas');
 ok(html.includes('Generar QR temporal · próximamente')&&html.includes('disabled>Generar QR temporal'),'QR temporal permanece deshabilitado');
 ok(ui.includes("const THEME_KEY='nexusTutorThemeV1'")&&ui.includes("prefers-color-scheme: dark")&&ui.includes('localStorage.setItem(THEME_KEY,next)'),'Tema persistente y preferencia del sistema');
+ok(ui.includes("addEventListener?.('change'")&&ui.includes('if(!storedTheme())'),'Tema del sistema se sigue mientras no exista preferencia manual');
 ok(ui.includes("const TAB_KEY='nexusTutorTabV1'")&&ui.includes('localStorage.setItem(TAB_KEY,next)'),'Pestaña activa persistente');
-ok(sw.includes("'./css/nexus-tutor.css'")&&sw.includes("'./features/destinations.js'")&&sw.includes("'./features/journey.js'")&&sw.includes("nexus-tutor-0.1.9"),'Service worker incluye CSS vacío y features modulares');
+ok(sw.includes("'./css/nexus-tutor.css'")&&sw.includes("'./features/destinations.js'")&&sw.includes("'./features/journey.js'")&&sw.includes("nexus-tutor-0.1.9"),'Service worker incluye CSS único y features modulares');
 ok(JSON.parse(pkg).version==='0.1.9','Package version 0.1.9');
 ok(!html.includes('TUTOR-AUTH-ID-')&&!html.includes('TEMP-PASS:'),'Sin QR ficticios incrustados');
 
