@@ -5,7 +5,7 @@ function assert(condition,message){if(!condition)throw new Error(message);}
 const root=new URL('../',import.meta.url);
 const html=await fs.readFile(new URL('index.html',root),'utf8');
 const scriptOrder=[...html.matchAll(/<script\s+src="([^"]+)"/g)].map(match=>match[1]);
-const expected=['config.js','core/runtime.js','services/location.js','features/destinations.js','features/journey.js','ui/shell.js'];
+const expected=['config.js','core/runtime.js','services/location.js','services/distance.js','services/telemetry.js','features/destinations.js','ui/journey-view.js','features/journey.js','ui/shell.js'];
 assert(JSON.stringify(scriptOrder)===JSON.stringify(expected),`Orden de arranque inesperado: ${scriptOrder.join(' -> ')}`);
 
 const ids=new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(match=>match[1]));
@@ -21,7 +21,7 @@ function makeClassList(owner){
 function makeElement({id='',className='',dataset={}}={}){
   const listeners={};
   const el={id,className,dataset:{...dataset},value:'',disabled:false,checked:false,hidden:false,textContent:'',innerHTML:'',style:{},attributes:{},listeners,
-    setAttribute(name,value){this.attributes[name]=String(value);if(name==='tabindex')this.tabIndex=String(value);},getAttribute(name){return this.attributes[name]??null;},
+    setAttribute(name,value){this.attributes[name]=String(value);if(name==='tabindex')this.tabIndex=String(value);if(name==='data-state')this['data-state']=String(value);},getAttribute(name){return this.attributes[name]??null;},
     addEventListener(name,fn,options){(listeners[name]??=[]).push({fn,capture:options===true||options?.capture===true});},
     focus(){document.activeElement=this;},setSelectionRange(){},showModal(){this.open=true;},close(){this.open=false;},appendChild(){},remove(){},click(){}}
   el.classList=makeClassList(el);return el;
@@ -49,7 +49,10 @@ for(const src of scriptOrder){
 assert(context.NEXUS_TUTOR_DEFAULTS?.version==='0.1.9','config.js no inicializó la versión');
 assert(context.NEXUS_TUTOR_RUNTIME,'runtime compartido no inicializó');
 assert(context.NEXUS_TUTOR_LOCATION,'servicio de ubicación no inicializó');
+assert(context.NEXUS_TUTOR_DISTANCE,'servicio de distancia no inicializó');
+assert(context.NEXUS_TUTOR_TELEMETRY,'servicio de telemetría no inicializó');
 assert(context.NEXUS_TUTOR_DESTINATIONS,'feature de destinos no inicializó');
+assert(context.NEXUS_TUTOR_JOURNEY_VIEW,'vista del recorrido no inicializó');
 assert(context.NEXUS_TUTOR_UI,'shell UI no inicializó');
 assert(typeof context.NEXUS_TUTOR_COMPLETE_JOURNEY==='function','controlador del recorrido no inicializó');
 assert(typeof watchSuccess==='function'&&typeof watchError==='function','journey.js no registró watchPosition');
