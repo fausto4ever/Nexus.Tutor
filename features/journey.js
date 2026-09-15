@@ -27,9 +27,12 @@
     const startedAt=Date.parse(item.startedAt||'');
     return !Number.isFinite(startedAt)||now-startedAt>=JOURNEY_TTL_MS;
   }
+  function hasTravelDuration(item){
+    const value=item?.travelDurationMs;
+    return value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value))&&Number(value)>=0;
+  }
   function calculateTravelDuration(item,now=Date.now()){
-    const stored=Number(item?.travelDurationMs);
-    if(Number.isFinite(stored)&&stored>=0)return stored;
+    if(hasTravelDuration(item))return Number(item.travelDurationMs);
     const startedAt=Date.parse(item?.startedAt||'');
     if(!Number.isFinite(startedAt))return 0;
     const atGateAt=Date.parse(item?.atGateAt||'');
@@ -48,7 +51,7 @@
     journey.atGateAt=new Date().toISOString();
     RUNTIME.storage.write(JOURNEY_KEY,journey);
   }
-  if(!expiredJourneyAtStartup&&(journey.status==='AT_GATE'||journey.status==='COMPLETED')&&!Number.isFinite(Number(journey.travelDurationMs))){
+  if(!expiredJourneyAtStartup&&(journey.status==='AT_GATE'||journey.status==='COMPLETED')&&!hasTravelDuration(journey)){
     const startedAt=Date.parse(journey.startedAt||''),atGateAt=Date.parse(journey.atGateAt||'');
     if(Number.isFinite(startedAt)&&Number.isFinite(atGateAt)){
       journey.travelDurationMs=Math.max(0,atGateAt-startedAt);
@@ -130,7 +133,7 @@
   function ensureAtGateTimestamp(){
     if(!journey.active||journey.status!=='AT_GATE')return false;
     if(Number.isFinite(Date.parse(journey.atGateAt||''))){
-      if(!Number.isFinite(Number(journey.travelDurationMs))){freezeTravelDuration();saveJourney();}
+      if(!hasTravelDuration(journey)){freezeTravelDuration();saveJourney();}
       return true;
     }
     journey.atGateAt=new Date().toISOString();freezeTravelDuration();saveJourney();return true;
@@ -184,16 +187,16 @@
   function completeJourney(options={}){
     if(!journey.active||journey.status==='COMPLETED')return;
     const automatic=Boolean(options?.automatic),from=journey.status;
-    if(from==='AT_GATE'&&!Number.isFinite(Number(journey.travelDurationMs)))freezeTravelDuration();
+    if(from==='AT_GATE'&&!hasTravelDuration(journey))freezeTravelDuration();
     journey.status='COMPLETED';journey.completedAt=new Date().toISOString();journey.completedAutomatically=automatic;saveJourney();stopRefreshLoop();
     addLog('COMPLETED',automatic?'Solicitud completada automáticamente después de 3 min en puerta':'Solicitud completada',latestDistance);
-    recordTelemetry('DELIVERY_COMPLETED',{fromStatus:from,automatic,waitSeconds:automatic?DELIVERY_WAIT_MS/1000:null,atGateAt:journey.atGateAt||null,travelDurationMs:Number.isFinite(Number(journey.travelDurationMs))?Number(journey.travelDurationMs):null});render();
+    recordTelemetry('DELIVERY_COMPLETED',{fromStatus:from,automatic,waitSeconds:automatic?DELIVERY_WAIT_MS/1000:null,atGateAt:journey.atGateAt||null,travelDurationMs:hasTravelDuration(journey)?Number(journey.travelDurationMs):null});render();
   }
   function completeDeliveryIfDue(reason='delivery-timeout'){
     if(!journey.active||journey.status!=='AT_GATE')return false;
     const remaining=deliveryRemainingMs();
     if(remaining===null||remaining>0)return false;
-    recordTelemetry('DELIVERY_WAIT_ELAPSED',{reason,waitSeconds:DELIVERY_WAIT_MS/1000,atGateAt:journey.atGateAt||null,travelDurationMs:Number.isFinite(Number(journey.travelDurationMs))?Number(journey.travelDurationMs):null});
+    recordTelemetry('DELIVERY_WAIT_ELAPSED',{reason,waitSeconds:DELIVERY_WAIT_MS/1000,atGateAt:journey.atGateAt||null,travelDurationMs:hasTravelDuration(journey)?Number(journey.travelDurationMs):null});
     completeJourney({automatic:true});return true;
   }
   function resetJourney(){recordTelemetry('JOURNEY_RESET');journey={active:false,status:'OUTSIDE',startedAt:null,travelDurationMs:null,lastCheckedAt:journey.lastCheckedAt||null,lastDistance:latestDistance,lastSource:latestSource,lastAccuracy:latestAccuracy};saveJourney();stopRefreshLoop();if((currentPosition||manualDistanceEnabled)&&schoolReady())refreshMeasurement({allowPromotion:false});else render();}
