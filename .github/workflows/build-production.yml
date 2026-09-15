@@ -54,8 +54,7 @@ jobs:
           test -f dist/destinations.min.js
           test -f dist/journey.min.js
           test -f dist/shell.min.js
-          test -f dist/foundation.min.css
-          test -f dist/application.min.css
+          test -f dist/nexus-tutor.min.css
           test -f dist/sw.js
           test -f dist/manifest.webmanifest
           test -f dist/icon.svg
@@ -63,14 +62,15 @@ jobs:
           ! test -f dist/app.min.js
           ! test -f dist/app.js
           ! test -f dist/config.js
+          ! test -f dist/foundation.min.css
+          ! test -f dist/application.min.css
           grep -q 'config.min.js' dist/index.html
           grep -q 'runtime.min.js' dist/index.html
           grep -q 'location.min.js' dist/index.html
           grep -q 'destinations.min.js' dist/index.html
           grep -q 'journey.min.js' dist/index.html
           grep -q 'shell.min.js' dist/index.html
-          grep -q 'foundation.min.css' dist/index.html
-          grep -q 'application.min.css' dist/index.html
+          grep -q 'nexus-tutor.min.css' dist/index.html
 
       - name: Commit dist
         if: github.event_name != 'pull_request'
