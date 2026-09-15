@@ -15,7 +15,7 @@ const [html,ui,css,sw,pkg,journey,distance,telemetry,journeyView]=await Promise.
 const checks=[];
 const ok=(condition,name)=>{assert(condition,name);checks.push(name);};
 
-ok(html.includes('CONTROL DE ACCESO · v0.1.11'),'Versión visible 0.1.11');
+ok(html.includes('CONTROL DE ACCESO · v0.1.12'),'Versión visible 0.1.12');
 const localStyles=[...html.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+\.css)"/g)].map(match=>match[1]).filter(href=>!href.startsWith('http'));
 ok(localStyles.length===1&&localStyles[0]==='css/nexus-tutor.css','Un solo stylesheet local es dueño de la interfaz');
 ok(css.trim().length>0,'Nueva base CSS cargada');
@@ -33,19 +33,23 @@ ok(['Recorrido','Mi QR','Avisos','QR temporal'].every(label=>html.includes(`<spa
 ok(html.includes('id="connectionBadge"')&&html.indexOf('id="connectionBadge"')<html.indexOf('id="schoolLock"'),'Conectividad separada del estado del destino');
 ok(html.includes('id="gpsBadge"')&&html.includes('id="wakeLockBadge"'),'Estados GPS y pantalla activa visibles en Recorrido');
 ok(html.indexOf('id="gpsBadge"')<html.indexOf('id="distanceValue"')&&html.indexOf('id="wakeLockBadge"')<html.indexOf('id="distanceValue"'),'Indicadores de navegación aparecen antes de la distancia');
+ok(html.includes('id="journeyElapsed"')&&html.includes('Tiempo de recorrido'),'Contador de tiempo visible en estado del recorrido');
 ok(html.includes('Reiniciar recorrido')&&!html.includes('id="resetJourneyBtn" class="secondary-btn hidden"'),'Control de reinicio visible en estructura');
 ok(['<option value="day">1 día</option>','<option value="week">1 semana</option>','<option value="month">1 mes</option>'].every(value=>html.includes(value)),'Vigencias QR temporal preparadas');
 ok(html.includes('Generar QR temporal · próximamente')&&html.includes('disabled>Generar QR temporal'),'QR temporal permanece deshabilitado');
 ok(ui.includes("const THEME_KEY='nexusTutorThemeV1'")&&ui.includes("prefers-color-scheme: dark")&&ui.includes('localStorage.setItem(THEME_KEY,next)'),'Tema persistente y preferencia del sistema');
 ok(ui.includes("addEventListener?.('change'")&&ui.includes('if(!storedTheme())'),'Tema del sistema se sigue mientras no exista preferencia manual');
 ok(ui.includes("const TAB_KEY='nexusTutorTabV1'")&&ui.includes('localStorage.setItem(TAB_KEY,next)'),'Pestaña activa persistente');
-ok(sw.includes("'./css/nexus-tutor.css'")&&sw.includes("'./services/distance.js'")&&sw.includes("'./services/telemetry.js'")&&sw.includes("'./ui/journey-view.js'")&&sw.includes("'./features/journey.js'")&&sw.includes("nexus-tutor-0.1.11"),'Service worker incluye módulos del recorrido');
+ok(sw.includes("'./css/nexus-tutor.css'")&&sw.includes("'./services/distance.js'")&&sw.includes("'./services/telemetry.js'")&&sw.includes("'./ui/journey-view.js'")&&sw.includes("'./features/journey.js'")&&sw.includes("nexus-tutor-0.1.12"),'Service worker incluye módulos del recorrido');
 ok(distance.includes('function haversine')&&distance.includes('router.project-osrm.org'),'Cálculo de distancia pertenece al servicio dedicado');
 ok(telemetry.includes("const LOG_KEY='nexusTutorLogV1'")&&telemetry.includes('function record('),'Historial y telemetría pertenecen al servicio dedicado');
+ok(telemetry.includes('sanitizeTelemetry')&&!journey.includes('latitude:Number.isFinite')&&!journey.includes('longitude:Number.isFinite'),'Telemetría no persiste coordenadas sucesivas del tutor');
 ok(journeyView.includes('function render(model)')&&journeyView.includes('function renderLog(items)'),'Render del recorrido pertenece a su vista');
+ok(journeyView.includes('function formatElapsed(')&&journeyView.includes('Llegaste en ${elapsedWords}'),'Vista formatea tiempo y lo muestra al completar');
+ok(journey.includes('travelDurationMs')&&journey.includes("candidate==='AT_GATE'")&&journey.includes('freezeTravelDuration()'),'Tiempo de recorrido se congela al llegar a AT_GATE');
 ok(journeyView.includes("navigator.wakeLock.request('screen')")&&journeyView.includes("wakeLockState='ACTIVE'"),'Wake Lock de pantalla se activa durante recorrido compatible');
 ok(!journey.includes('function haversine')&&!journey.includes('router.project-osrm.org')&&!journey.includes('eventLog.innerHTML'),'Journey coordina sin reabsorber distancia ni render del historial');
-ok(JSON.parse(pkg).version==='0.1.11','Package version 0.1.11');
+ok(JSON.parse(pkg).version==='0.1.12','Package version 0.1.12');
 ok(!html.includes('TUTOR-AUTH-ID-')&&!html.includes('TEMP-PASS:'),'Sin QR ficticios incrustados');
 
 console.log(`UI: ${checks.length} comprobaciones correctas.`);
