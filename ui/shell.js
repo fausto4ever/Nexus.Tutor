@@ -19,7 +19,7 @@
   function applyTheme(theme,{persist=true}={}){
     const next=theme==='dark'?'dark':'light';
     root.dataset.theme=next;
-    if(themeMeta)themeMeta.setAttribute('content',next==='dark'?'#090d16':'#f4f7fb');
+    if(themeMeta)themeMeta.setAttribute('content',next==='dark'?'#0b0f19':'#f8fafc');
     if(themeIcon)themeIcon.textContent=next==='dark'?'☀':'☾';
     if(themeBtn){
       themeBtn.setAttribute('aria-label',next==='dark'?'Cambiar a modo claro':'Cambiar a modo oscuro');
@@ -51,6 +51,12 @@
   activateTab(savedTab&&availableTab(savedTab)?savedTab:'tab-tracking',{persist:false});
   themeBtn?.addEventListener('click',toggleTheme);
   for(const button of navButtons)button.addEventListener('click',()=>activateTab(button.dataset.tab));
+  try{
+    const media=window.matchMedia?.('(prefers-color-scheme: dark)');
+    media?.addEventListener?.('change',event=>{
+      if(!storedTheme())applyTheme(event.matches?'dark':'light',{persist:false});
+    });
+  }catch{}
 
   window.NEXUS_TUTOR_UI={applyTheme,activateTab};
 })();
