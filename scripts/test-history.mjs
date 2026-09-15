@@ -1,11 +1,11 @@
 import fs from 'node:fs/promises';
 
-function createHarness(source, stored = new Map()) {
+function createHarness(sources, stored = new Map()) {
   const elements = new Map(), timers = new Map(), eventBus=new Map();
   let id = 0, clock = 0, gpsSuccessCallback, gpsErrorCallback, lastPosition=null;
   const gpsRequests=[],windowListeners={},documentListeners={};
   const element = selector => {
-    if (!elements.has(selector)) elements.set(selector, {value:'',disabled:false,textContent:'',innerHTML:'',style:{},className:'',classList:{add(){},remove(){},toggle(){}},listeners:{},setAttribute(name,value){this[name]=value;},addEventListener(name,fn){this.listeners[name]=fn;}});
+    if (!elements.has(selector)) elements.set(selector, {value:'',disabled:false,checked:false,textContent:'',innerHTML:'',style:{},className:'',classList:{add(){},remove(){},toggle(){}},listeners:{},setAttribute(name,value){this[name]=value;},addEventListener(name,fn){this.listeners[name]=fn;}});
     return elements.get(selector);
   };
   const document={visibilityState:'visible',activeElement:null,querySelector:selector=>element(selector),addEventListener:(name,fn)=>{documentListeners[name]=fn;},body:{appendChild(){}},createElement:()=>({click(){},remove(){}})};
@@ -26,10 +26,16 @@ function createHarness(source, stored = new Map()) {
   };
   const win={NEXUS_TUTOR_DEFAULTS:defaults,NEXUS_TUTOR_RUNTIME:runtime,NEXUS_TUTOR_LOCATION:location,addEventListener:(name,fn)=>{windowListeners[name]=fn;}};
   const URLStub={createObjectURL:()=> 'blob:test',revokeObjectURL(){}};
-  new Function('window','document','navigator','localStorage','setInterval','clearInterval','Date','console','fetch','Blob','URL',source)(
-    win,document,navigator,localStorage,
-    (fn,ms)=>{timers.set(++id,{fn,ms,next:clock+ms});return id;},key=>timers.delete(key),TestDate,{warn(){}},async()=>{throw Error('Route unavailable');},globalThis.Blob,URLStub
+  const setIntervalStub=(fn,ms)=>{timers.set(++id,{fn,ms,next:clock+ms});return id;};
+  const clearIntervalStub=key=>timers.delete(key);
+  const setTimeoutStub=(fn,ms)=>{const key=++id;return key;};
+  const clearTimeoutStub=()=>{};
+  const consoleStub={warn(){}};
+  const fetchStub=async()=>{throw Error('Route unavailable');};
+  const run=source=>new Function('window','document','navigator','localStorage','setInterval','clearInterval','setTimeout','clearTimeout','Date','console','fetch','Blob','URL',source)(
+    win,document,navigator,localStorage,setIntervalStub,clearIntervalStub,setTimeoutStub,clearTimeoutStub,TestDate,consoleStub,fetchStub,globalThis.Blob,URLStub
   );
+  run(sources.distance);run(sources.telemetry);run(sources.view);run(sources.journey);
   const flush = async()=>{await Promise.resolve();await Promise.resolve();await Promise.resolve();await Promise.resolve();};
   return {
     stored,timers,element,gpsRequests,win,navigator,runtime,
@@ -51,8 +57,8 @@ function createHarness(source, stored = new Map()) {
 }
 function assert(condition,message){if(!condition)throw Error(message);}
 
-async function testHistory(source){
-  const h=createHarness(source);
+async function testHistory(sources){
+  const h=createHarness(sources);
   await h.event('#manualDistanceToggle','change',{target:{checked:true}});
   await h.event('#pickupBtn','click');
   assert(h.logs().length===1,'Start must record exactly one event');
@@ -67,15 +73,15 @@ async function testHistory(source){
   assert(h.journey().status==='AT_GATE','AT_GATE promotes immediately');
   assert(h.measurementTimerMs()===10000,'AT_GATE does not increase polling beyond READY');
   await h.advance(10000);assert(h.logs()[0].status==='AT_GATE','AT_GATE keeps periodic telemetry/history');
-  const reloaded=createHarness(source,h.stored);assert(reloaded.journey().status==='AT_GATE','Log/journey persist on reload');
+  const reloaded=createHarness(sources,h.stored);assert(reloaded.journey().status==='AT_GATE','Log/journey persist on reload');
   assert(reloaded.element('#distanceValue').textContent!=='—','Last known distance restores on reload');
   const before=h.logs().length;await h.pendingReset();assert(!h.journey().active,'Reset ends journey');
   await h.advance(60000);assert(h.logs().length===before,'Reset stops timer logging');
   return ['Start log','WAITING cadence','WAITING periodic','Manual source','Immediate READY','READY 10s cadence','READY record','Immediate AT_GATE','AT_GATE cadence cap','AT_GATE record','Reload status','Reload last distance','Reset inactive','Reset stops logging'];
 }
 
-async function testLinearProgress(source){
-  const h=createHarness(source);
+async function testLinearProgress(sources){
+  const h=createHarness(sources);
   await h.event('#manualDistanceToggle','change',{target:{checked:true}});
   const set=async meters=>{h.element('#manualDistanceInput').value=String(meters);await h.event('#manualDistanceInput','change');};
   await set(1500);assert(h.element('#distanceProgress').style.width==='0%','1500m stays at zero outside 1000m scale');
@@ -91,8 +97,8 @@ async function testLinearProgress(source){
   return ['Outside scale clamp','WAITING marker start','Halfway linear','300m linear','READY linear','AT_GATE linear','Zero 100%','WAITING marker','READY marker','AT_GATE marker'];
 }
 
-async function testEarlyActivationAndPolling(source){
-  const h=createHarness(source);
+async function testEarlyActivationAndPolling(sources){
+  const h=createHarness(sources);
   assert(h.element('#pickupBtn').disabled,'Fresh measurement required before activating');
   await h.event('#manualDistanceToggle','change',{target:{checked:true}});
   h.element('#manualDistanceInput').value='50000';await h.event('#manualDistanceInput','change');
@@ -116,8 +122,8 @@ async function testEarlyActivationAndPolling(source){
   return ['Fresh required','50km activation','OUTSIDE state','OUTSIDE cadence','WAITING cadence','READY cadence','AT_GATE cadence cap','Waiting delivery UI','Monotonic after gate','Completed greeting','Completion stops polling'];
 }
 
-async function testResumeAndGpsLoss(source){
-  const h=createHarness(source);
+async function testResumeAndGpsLoss(sources){
+  const h=createHarness(sources);
   await h.gps(19,-101.05);
   const before=h.element('#distanceValue').textContent;
   assert(before!=='—'&&!h.element('#pickupBtn').disabled,'Initial GPS produces fresh usable distance');
@@ -148,8 +154,8 @@ async function testResumeAndGpsLoss(source){
   return ['Initial GPS','Return dedup','Fresh GPS maximumAge','Keep metrage while recalculating','Recalculating indicator','No stale start','Fresh resume','Watch error keeps distance','Watch error label','Watch error blocks start','GPS recovery','Active status preserved on failure','Active metrage preserved','Active failure label'];
 }
 
-async function testConnectivityAndTelemetry(source){
-  const h=createHarness(source);
+async function testConnectivityAndTelemetry(sources){
+  const h=createHarness(sources);
   assert(h.element('#connectionBadge').textContent.includes('En línea'),'Starts with online indicator');
   h.offline();assert(h.element('#connectionBadge').textContent.includes('Sin internet'),'Offline event updates indicator');
   h.online();assert(h.element('#connectionBadge').textContent.includes('En línea'),'Online event restores indicator');
@@ -166,6 +172,12 @@ async function testConnectivityAndTelemetry(source){
   return ['Online indicator','Offline indicator','Online recovery','Telemetry stored','Connectivity telemetry','Journey telemetry','Status telemetry','Telemetry fields','Download JSON control'];
 }
 
-const source=await fs.readFile(new URL('../features/journey.js',import.meta.url),'utf8');
-const checks=[...await testHistory(source),...await testLinearProgress(source),...await testEarlyActivationAndPolling(source),...await testResumeAndGpsLoss(source),...await testConnectivityAndTelemetry(source)];
+const [distance,telemetry,view,journey]=await Promise.all([
+  fs.readFile(new URL('../services/distance.js',import.meta.url),'utf8'),
+  fs.readFile(new URL('../services/telemetry.js',import.meta.url),'utf8'),
+  fs.readFile(new URL('../ui/journey-view.js',import.meta.url),'utf8'),
+  fs.readFile(new URL('../features/journey.js',import.meta.url),'utf8')
+]);
+const sources={distance,telemetry,view,journey};
+const checks=[...await testHistory(sources),...await testLinearProgress(sources),...await testEarlyActivationAndPolling(sources),...await testResumeAndGpsLoss(sources),...await testConnectivityAndTelemetry(sources)];
 console.log(`Historial: ${checks.length} comprobaciones correctas.`);
