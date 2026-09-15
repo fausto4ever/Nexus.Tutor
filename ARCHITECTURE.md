@@ -10,7 +10,7 @@ Esta rama parte del commit estable `47b8524` y prioriza separación de responsab
 - `features/destinations.js`: único propietario del diálogo de configuración, destinos guardados, selección de destino, coordenadas, umbrales y método de distancia. Publica `config:changed` al seleccionar o guardar.
 - `features/journey.js`: controlador del recorrido 0.1.9. Consume configuración persistida y eventos `config:changed`; no registra listeners sobre los controles de configuración.
 - `ui/shell.js`: navegación inferior y tema Light/Dark.
-- `css/nexus-tutor.css`: única fuente de estilos de la interfaz. El HTML y el build cargan un solo stylesheet local.
+- `css/nexus-tutor.css`: única fuente de estilos de la interfaz. El HTML, service worker y build cargan un solo stylesheet local.
 
 ## Reglas
 
@@ -35,10 +35,10 @@ Esta rama parte del commit estable `47b8524` y prioriza separación de responsab
 - La configuración se comunica al recorrido mediante `RUNTIME.events` (`config:changed`).
 - El arranque integrado valida IDs reales del HTML, orden real de scripts y que `Guardar cambios` y `Voy por mi hijo` tengan exactamente un propietario.
 - El monolito `app.js` fue retirado de la rama; el recorrido vive exclusivamente en `features/journey.js`.
-- La doble cascada `foundation.css` + `application.css` fue consolidada en `css/nexus-tutor.css`. Build, service worker y CI generan/validan un único `nexus-tutor.min.css`.
+- La doble cascada `foundation.css` + `application.css` fue consolidada en `css/nexus-tutor.css`. Build, service worker y CI generan/validan un único `nexus-tutor.min.css` y rechazan referencias a los CSS legacy.
 
 ## Deuda aún deliberadamente conservada
 
-`css/nexus-tutor.css` conserva en esta primera consolidación el orden efectivo de la cascada validada en dispositivo. La limpieza fina de declaraciones repetidas y `!important` se hará como un cambio separado, con comparación visual, para no mezclar equivalencia estructural con cambios de apariencia.
+`css/nexus-tutor.css` conserva en esta primera consolidación el orden efectivo de la cascada validada en dispositivo. Ya no hay doble propietario ni dos hojas compitiendo. La limpieza fina de declaraciones repetidas dentro del archivo y de `!important` se hará como una fase independiente, con comparación visual, porque algunos `!important` todavía son funcionales (por ejemplo, reglas que deben imponerse a estilos inline de los marcadores).
 
 `features/journey.js` aún concentra máquina de estados, polling, telemetría y render de Recorrido. Esa concentración es aceptable mientras cada responsabilidad externa (GPS, configuración, shell) permanezca fuera del controlador.
