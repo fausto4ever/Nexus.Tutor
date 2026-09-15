@@ -1,5 +1,5 @@
 const CACHE='nexus-tutor-0.1.9';
-const ASSETS=['./','./index.html','./css/foundation.css','./css/application.css','./config.js','./core/runtime.js','./services/location.js','./app.js','./features/destinations.js','./ui/shell.js','./manifest.webmanifest','./icon.svg'];
+const ASSETS=['./','./index.html','./css/foundation.css','./css/application.css','./config.js','./core/runtime.js','./services/location.js','./features/destinations.js','./features/journey.js','./ui/shell.js','./manifest.webmanifest','./icon.svg'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
 self.addEventListener('fetch',event=>{
