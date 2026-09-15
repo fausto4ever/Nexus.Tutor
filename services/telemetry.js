@@ -15,12 +15,24 @@
   }
   function clearLog(){saveLog([]);return[];}
 
-  function loadTelemetry(){return RUNTIME.storage.read(TELEMETRY_KEY,[]);}
-  function saveTelemetry(items){RUNTIME.storage.write(TELEMETRY_KEY,(items||[]).slice(0,1000));}
+  function sanitizeTelemetry(items){
+    let changed=false;
+    const clean=(items||[]).map(item=>{
+      if(!item||typeof item!=='object'||(!Object.hasOwn(item,'latitude')&&!Object.hasOwn(item,'longitude')))return item;
+      const {latitude,longitude,...rest}=item;
+      void latitude;void longitude;changed=true;return rest;
+    });
+    if(changed)RUNTIME.storage.write(TELEMETRY_KEY,clean.slice(0,1000));
+    return clean;
+  }
+  function loadTelemetry(){return sanitizeTelemetry(RUNTIME.storage.read(TELEMETRY_KEY,[]));}
+  function saveTelemetry(items){RUNTIME.storage.write(TELEMETRY_KEY,sanitizeTelemetry(items).slice(0,1000));}
   function record(event,payload={}){
+    const {latitude,longitude,...safePayload}=payload||{};
+    void latitude;void longitude;
     const items=loadTelemetry();
-    items.unshift({at:new Date().toISOString(),event,...payload});
-    saveTelemetry(items);
+    items.unshift({at:new Date().toISOString(),event,...safePayload});
+    RUNTIME.storage.write(TELEMETRY_KEY,items.slice(0,1000));
     return items;
   }
 
