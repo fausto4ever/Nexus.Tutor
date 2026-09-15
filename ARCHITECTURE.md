@@ -1,46 +1,139 @@
-# Nexus.Tutor 0.1.9 — arquitectura de transición
+# Nexus.Tutor 0.1.9 — arquitectura de trabajo
 
-Esta rama parte del commit estable `47b8524` y prioriza separación de responsabilidades antes de reintroducir mejoras de GPS o experiencia.
+## Objetivo
 
-## Propiedad de cada capa
+Mantener el comportamiento funcional validado de Nexus.Tutor mientras reducimos deuda técnica y dejamos límites claros entre almacenamiento, geolocalización, destinos, recorrido y presentación.
 
-- `config.js`: defaults y reparación/migración temprana de configuración antes de arrancar la app.
-- `core/runtime.js`: utilidades compartidas de storage, eventos internos y acceso DOM.
-- `services/location.js`: único propietario del acceso a `navigator.geolocation`; expone `supported`, `watch`, `stop`, `fresh` y la última posición aceptada mediante `current`.
-- `features/destinations.js`: único propietario del diálogo de configuración, destinos guardados, selección de destino, coordenadas, umbrales y método de distancia. Publica `config:changed` al seleccionar o guardar.
-- `features/journey.js`: controlador del recorrido 0.1.9. Consume configuración persistida y eventos `config:changed`; no registra listeners sobre los controles de configuración.
-- `ui/shell.js`: navegación inferior y tema Light/Dark.
-- `css/nexus-tutor.css`: única fuente de estilos de la interfaz. El HTML, service worker y build cargan un solo stylesheet local.
+## Capas actuales
 
-## Reglas
+### `config.js`
 
-1. Cuatro pestañas oficiales: Recorrido, Mi QR, Avisos y QR temporal.
-2. No añadir una pestaña Lab a esta rama.
-3. No interceptar ni reemplazar métodos nativos de `navigator.geolocation`.
-4. Ningún feature o controlador debe acceder directamente a `navigator.geolocation`; debe usar `services/location.js`.
-5. `features/destinations.js` es el único propietario de guardar/seleccionar destinos y del botón `Guardar cambios`.
-6. `features/journey.js` sólo reacciona a cambios de configuración mediante eventos del runtime; no depende del orden capture/bubble de listeners de settings.
-7. No reintroducir modo híbrido ni calibración estadística durante la estabilización.
-8. Todo cambio estructural debe mantener `scripts/test-startup.mjs` verde.
-9. El build final debe ejecutar pruebas contra el orden real de scripts y validar los assets de `dist`.
-10. El navegador debe cargar un solo stylesheet local; `foundation.css` y `application.css` no deben reaparecer como capas independientes.
-11. `scripts/test-css.mjs` impide que la deuda CSS supere la línea base optimizada: 156 declaraciones `!important` y 61 selectores repetidos. Todo trabajo posterior debe mantener o reducir esos valores.
+Define los valores por defecto de Nexus.Tutor y conserva la migración inicial de configuraciones/destinos guardados.
 
-## Migraciones completadas
+### `core/runtime.js`
 
-- El navegador carga las fuentes por responsabilidad: config → runtime → location → destinations → journey → UI shell.
-- Los archivos legacy duplicados `coordinates.js`, `ui.js`, `styles.css` y `ui.css` fueron retirados de esta rama.
-- El acceso a `watchPosition` y `getCurrentPosition` está encapsulado en `services/location.js`.
-- `features/destinations.js` ya no depende de un listener capture antes de otro guardado ni de un listener bubble posterior. Guardar configuración tiene un único propietario.
-- Seleccionar un destino guardado actualiza inmediatamente el destino activo y publica `config:changed`, por lo que la distancia se recalcula sin exigir un guardado adicional.
-- La configuración se comunica al recorrido mediante `RUNTIME.events` (`config:changed`).
-- El arranque integrado valida IDs reales del HTML, orden real de scripts y que `Guardar cambios` y `Voy por mi hijo` tengan exactamente un propietario.
-- El monolito `app.js` fue retirado de la rama; el recorrido vive exclusivamente en `features/journey.js`.
-- La doble cascada `foundation.css` + `application.css` fue consolidada en `css/nexus-tutor.css`. Build, service worker y CI generan/validan un único `nexus-tutor.min.css` y rechazan referencias a los CSS legacy.
-- La fuente consolidada fue pasada por el mismo CleanCSS `level:2` utilizado en producción y guardada en formato legible. Los selectores repetidos bajaron de 68 a 61 sin cambiar la salida efectiva de producción.
+Infraestructura compartida:
 
-## Deuda aún deliberadamente conservada
+- acceso seguro a `localStorage`;
+- bus de eventos interno;
+- utilidades DOM;
+- aislamiento de fallos de listeners para que un consumidor no interrumpa a los demás.
 
-`css/nexus-tutor.css` conserva 156 declaraciones `!important`. Ya no son deuda causada únicamente por dos archivos compitiendo: algunas siguen siendo funcionales —por ejemplo reglas que deben imponerse a estilos inline de los marcadores, visibilidad y reduced-motion— y el resto se retirará por componente con comparación visual. CI impide que este número o los 61 selectores repetidos vuelvan a aumentar.
+### `services/location.js`
 
-`features/journey.js` aún concentra máquina de estados, polling, telemetría y render de Recorrido. Esa concentración es aceptable mientras cada responsabilidad externa (GPS, configuración, shell) permanezca fuera del controlador.
+Única frontera con `navigator.geolocation`.
+
+Responsabilidades:
+
+- `watchPosition`;
+- lectura fresca con `getCurrentPosition`;
+- detener el watch;
+- conservar la última posición aceptada.
+
+Ningún otro módulo debe monkey-patchear `navigator.geolocation` ni simular eventos de foco.
+
+### `features/destinations.js`
+
+Único propietario de:
+
+- diálogo de configuración;
+- destinos guardados;
+- destino activo;
+- coordenadas;
+- umbrales;
+- método de distancia;
+- selección inmediata de destino;
+- publicación de `config:changed`.
+
+Durante un recorrido activo, los controles editables del diálogo quedan bloqueados. El diálogo puede abrirse para consultar la configuración, pero no modificarla.
+
+### `features/journey.js`
+
+Actualmente coordina:
+
+- máquina de estados del recorrido;
+- cálculo de distancia;
+- polling;
+- GPS y reanudación;
+- simulación manual;
+- render de la pantalla de recorrido;
+- historial y telemetría;
+- conectividad;
+- finalización del recorrido.
+
+Este archivo sigue siendo el siguiente candidato a división por responsabilidades. Esa división se hará después de estabilizar esta base, sin cambiar comportamiento.
+
+Reglas de estado:
+
+`OUTSIDE → WAITING → READY → AT_GATE → COMPLETED`
+
+- el estado sólo puede avanzar;
+- una distancia mayor nunca degrada un estado ya alcanzado;
+- `COMPLETED` es terminal;
+- GPS sólo puede avanzar hasta `AT_GATE`;
+- `COMPLETED` queda reservado para confirmación futura de Nexus.Access/Gateway;
+- el recorrido puede iniciar desde cualquier distancia con una medición utilizable y fresca.
+
+El estado inicial de un recorrido respeta directamente la medición fresca existente (`OUTSIDE`, `WAITING`, `READY` o `AT_GATE`).
+
+El polling evita mediciones periódicas simultáneas y OSRM tiene timeout con fallback a Haversine.
+
+### `ui/shell.js`
+
+Propietario de:
+
+- navegación entre las cuatro pestañas;
+- tema claro/oscuro;
+- persistencia de pestaña y tema;
+- seguimiento de `prefers-color-scheme` mientras el usuario no haya elegido un tema manualmente.
+
+## CSS
+
+La cascada histórica fue retirada y se reconstruyó una única base visual en:
+
+`css/nexus-tutor.css`
+
+Reglas actuales:
+
+- un solo stylesheet fuente;
+- sin `!important`;
+- sin `transition: all`;
+- variables para tema claro/oscuro;
+- `color-scheme` para controles nativos;
+- `:focus-visible`;
+- `prefers-reduced-motion`;
+- soporte `100dvh` con fallback;
+- navegación inferior, tarjetas, recorrido, historial, pantallas futuras y diálogo de configuración definidos en la misma hoja;
+- los marcadores WAITING/READY/AT_GATE usan anclajes CSS para no desbordarse en los extremos.
+
+No deben reaparecer `foundation.css`, `application.css`, `styles.css` ni `ui.css`.
+
+## Build
+
+`scripts/build.mjs` compila:
+
+- `config.js → config.min.js`
+- `core/runtime.js → runtime.min.js`
+- `services/location.js → location.min.js`
+- `features/destinations.js → destinations.min.js`
+- `features/journey.js → journey.min.js`
+- `ui/shell.js → shell.min.js`
+- `css/nexus-tutor.css → nexus-tutor.min.css`
+
+El build de producción no genera sourcemaps.
+
+## Pruebas
+
+- `test-startup.mjs`: orden real de scripts y propietarios únicos de acciones principales.
+- `test-history.mjs`: recorrido, estados, polling, GPS, historial y telemetría.
+- `test-destinations.mjs`: destinos, configuración, selección inmediata y bloqueo durante recorrido.
+- `test-ui.mjs`: estructura de cuatro pestañas, tema, stylesheet único y componentes visuales base.
+- `test-css.mjs`: exige un único CSS fuente, 0 `!important`, ausencia de CSS legacy, foco visible y reduced motion.
+
+## Política de rama
+
+El trabajo continúa en la rama existente `refactor/0.1.9-structure`.
+
+No crear ramas nuevas salvo instrucción explícita del usuario.
+
+No mergear ni publicar en `main` sin autorización explícita.
