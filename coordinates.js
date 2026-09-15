@@ -29,13 +29,41 @@
   function writeConfig(config){localStorage.setItem(CFG_KEY,JSON.stringify(config));}
   function currentSchool(config){return{...(defaults.school||{}),...(config.school||{})};}
   function cleanDestination(item,index){return{id:String(item?.id||`dest-${index+1}`),name:String(item?.name||`Destino ${index+1}`),lat:item?.lat??null,lng:item?.lng??null};}
+  function hasValidCoordinates(item){
+    if(!item)return false;
+    const latitude=Number(item.lat),longitude=Number(item.lng);
+    return item.lat!=null&&item.lng!=null&&String(item.lat).trim()!==''&&String(item.lng).trim()!==''&&Number.isFinite(latitude)&&Number.isFinite(longitude)&&Math.abs(latitude)<=90&&Math.abs(longitude)<=180;
+  }
+  function recoverDestinationFromTelemetry(destination){
+    if(hasValidCoordinates(destination))return destination;
+    const telemetry=readJson(TELEMETRY_KEY,[]);
+    const match=telemetry.find(item=>item?.destinationId===destination?.id&&Number.isFinite(Number(item?.destinationLatitude))&&Number.isFinite(Number(item?.destinationLongitude)));
+    if(!match)return destination;
+    return{...destination,lat:Number(match.destinationLatitude),lng:Number(match.destinationLongitude),name:destination.name||match.destinationName||'Destino'};
+  }
   function getModel({persist=false}={}){
     const config=readJson(CFG_KEY,{}),school=currentSchool(config);
     let destinations=Array.isArray(config.destinations)&&config.destinations.length?config.destinations.map(cleanDestination):[{id:'primary',name:school.name||'Escuela',lat:school.lat??null,lng:school.lng??null}];
     const seen=new Set();destinations=destinations.map((item,index)=>{let id=item.id;if(seen.has(id))id=`${id}-${index+1}`;seen.add(id);return{...item,id};});
     let activeDestinationId=String(config.activeDestinationId||destinations[0].id);
     if(!destinations.some(item=>item.id===activeDestinationId))activeDestinationId=destinations[0].id;
-    const active=destinations.find(item=>item.id===activeDestinationId)||destinations[0];
+    let activeIndex=destinations.findIndex(item=>item.id===activeDestinationId);
+    let active=destinations[activeIndex]||destinations[0];
+
+    // 0.1.8 podía conservar un destino sin coordenadas y después pisar config.school.
+    // Si la configuración heredada todavía tiene coordenadas válidas, se usan para reparar
+    // el destino activo antes de persistir el modelo de múltiples destinos.
+    if(!hasValidCoordinates(active)&&hasValidCoordinates(school)){
+      active={...active,name:active.name||school.name||'Destino',lat:Number(school.lat),lng:Number(school.lng)};
+      destinations[activeIndex]=active;
+    }else if(!hasValidCoordinates(active)){
+      const recovered=recoverDestinationFromTelemetry(active);
+      if(hasValidCoordinates(recovered)){
+        active=recovered;
+        destinations[activeIndex]=active;
+      }
+    }
+
     if(persist)writeConfig({...config,destinations,activeDestinationId,school:{name:active.name,lat:active.lat,lng:active.lng}});
     return{config,destinations,activeDestinationId,active};
   }
