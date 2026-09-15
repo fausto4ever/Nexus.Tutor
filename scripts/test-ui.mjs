@@ -3,8 +3,8 @@ import fs from 'node:fs/promises';
 function assert(condition,message){if(!condition)throw new Error(message);}
 const [html,ui,css,sw,pkg]=await Promise.all([
   fs.readFile(new URL('../index.html',import.meta.url),'utf8'),
-  fs.readFile(new URL('../ui.js',import.meta.url),'utf8'),
-  fs.readFile(new URL('../ui.css',import.meta.url),'utf8'),
+  fs.readFile(new URL('../ui/shell.js',import.meta.url),'utf8'),
+  fs.readFile(new URL('../css/application.css',import.meta.url),'utf8'),
   fs.readFile(new URL('../sw.js',import.meta.url),'utf8'),
   fs.readFile(new URL('../package.json',import.meta.url),'utf8')
 ]);
@@ -12,7 +12,8 @@ const checks=[];
 const ok=(condition,name)=>{assert(condition,name);checks.push(name);};
 
 ok(html.includes('CONTROL DE ACCESO · v0.1.9'),'Versión visible 0.1.9');
-ok(html.includes('href="ui.css"')&&html.includes('src="ui.js"'),'Recursos UI cargados');
+ok(html.includes('href="css/application.css"')&&html.includes('src="ui/shell.js"'),'Recursos UI modulares cargados');
+ok(html.includes('src="core/runtime.js"')&&html.includes('src="services/location.js"')&&html.includes('src="features/destinations.js"'),'Capas de runtime, servicios y features cargadas');
 ok(html.includes('Plus+Jakarta+Sans'),'Tipografía de referencia cargada');
 ok(['tab-tracking','tab-qr','tab-notifications','tab-temp-qr'].every(id=>html.includes(`id="${id}"`)),'Cuatro pestañas presentes');
 ok(['Recorrido','Mi QR','Avisos','QR temporal'].every(label=>html.includes(`<span>${label}</span>`)),'Navegación inferior completa');
@@ -24,7 +25,7 @@ ok(ui.includes("const THEME_KEY='nexusTutorThemeV1'")&&ui.includes("prefers-colo
 ok(ui.includes("const TAB_KEY='nexusTutorTabV1'")&&ui.includes('localStorage.setItem(TAB_KEY,next)'),'Pestaña activa persistente');
 ok(css.includes('max-width:480px')&&css.includes('width:92px')&&css.includes("'Plus Jakarta Sans'"),'Diseño móvil compacto respeta referencia');
 ok(css.includes('html[data-theme="dark"]')&&css.includes('.bottom-nav')&&css.includes('.future-card'),'Estilos dark y navegación definidos');
-ok(sw.includes("'./ui.css'")&&sw.includes("'./ui.js'")&&sw.includes("nexus-tutor-0.1.9"),'Service worker incluye UI 0.1.9');
+ok(sw.includes("'./css/application.css'")&&sw.includes("'./ui/shell.js'")&&sw.includes("nexus-tutor-0.1.9"),'Service worker incluye estructura modular 0.1.9');
 ok(JSON.parse(pkg).version==='0.1.9','Package version 0.1.9');
 ok(!html.includes('TUTOR-AUTH-ID-')&&!html.includes('TEMP-PASS:'),'Sin QR ficticios incrustados');
 
