@@ -3,23 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#f4f7fb">
+  <meta name="theme-color" content="#f1f5f9">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Nexus.Tutor</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="ui.css">
 </head>
 <body>
   <main class="app-shell">
     <header class="topbar">
-      <div>
-        <div class="eyebrow">CONTROL DE ACCESO · v0.1.8</div>
+      <div class="brand-block">
+        <div class="eyebrow">CONTROL DE ACCESO · v0.1.9</div>
         <h1>Nexus.Tutor</h1>
       </div>
       <div class="topbar-actions">
+        <span id="connectionBadge" class="badge badge-ok connection-badge">● En línea</span>
         <button id="themeToggleBtn" class="icon-btn" type="button" aria-label="Cambiar a modo oscuro" title="Modo oscuro"><span id="themeIcon" aria-hidden="true">☾</span></button>
         <button id="settingsBtn" class="icon-btn" type="button" aria-label="Configuración">⚙️</button>
       </div>
@@ -33,10 +37,7 @@
               <span class="muted">Destino</span>
               <strong id="schoolName">Instituto Ausbel</strong>
             </div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
-              <span id="connectionBadge" class="badge badge-ok">● En línea</span>
-              <span id="schoolLock" class="badge badge-warn">Sin fijar</span>
-            </div>
+            <span id="schoolLock" class="badge badge-warn">Sin ubicación</span>
           </div>
           <div id="schoolCoords" class="coords">Configura la ubicación fija del destino.</div>
         </section>
@@ -46,7 +47,7 @@
           <div class="distance-value"><span id="distanceValue">—</span><span id="distanceUnit">m</span></div>
           <div class="distance-meta">
             <span>Precisión GPS <strong id="accuracyValue">—</strong></span>
-            <span id="distanceSource">Distancia directa</span>
+            <span id="distanceSource">Esperando ubicación</span>
           </div>
           <div class="progress-track" aria-hidden="true"><div id="distanceProgress" class="progress-bar"></div></div>
           <div class="threshold-row threshold-scale" aria-label="Umbrales de proximidad">
@@ -79,14 +80,14 @@
                 <option value="1000">1 km</option>
               </select>
             </label>
-            <p id="manualDistanceHelp" class="helper">Usa + o −, o escribe metros enteros y confirma al salir del campo. Una ruta alterna puede aumentar la distancia; durante una prueba activa el estado alcanzado se conserva hasta reiniciar.</p>
+            <p id="manualDistanceHelp" class="helper">Usa + o −, o escribe metros enteros y confirma al salir del campo. Durante una prueba activa el estado alcanzado se conserva hasta reiniciar.</p>
           </div>
         </section>
 
         <section class="status-card card">
-          <span class="muted">Estado de prueba</span>
-          <div id="statusPill" role="status" aria-live="polite" class="status-pill status-outside">FUERA DEL UMBRAL</div>
-          <p id="statusMessage">Puedes iniciar el trayecto desde cualquier distancia.</p>
+          <span class="muted">Estado del recorrido</span>
+          <div id="statusPill" role="status" aria-live="polite" class="status-pill status-outside">UBICACIÓN PENDIENTE</div>
+          <p id="statusMessage">Esperando una medición GPS válida.</p>
           <div class="sync-row">
             <span>Próxima medición</span>
             <strong id="countdown">—</strong>
@@ -103,13 +104,13 @@
             <span id="pickupBtnText">VOY POR MI HIJO</span>
           </button>
           <p id="actionHint" class="action-hint">Esperando ubicación GPS…</p>
-          <button id="resetJourneyBtn" class="secondary-btn hidden">Reiniciar prueba</button>
+          <button id="resetJourneyBtn" class="secondary-btn reset-btn" type="button">Reiniciar recorrido</button>
         </section>
 
         <section class="log-card card">
           <div class="section-title">
             <strong>Historial de esta prueba</strong>
-            <div>
+            <div class="log-actions">
               <button id="downloadTelemetryBtn" class="text-btn" type="button">Descargar JSON</button>
               <button id="clearLogBtn" class="text-btn" type="button">Limpiar</button>
             </div>
