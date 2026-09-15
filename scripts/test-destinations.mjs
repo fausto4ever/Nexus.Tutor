@@ -71,9 +71,15 @@ assert(h.telemetry().some(item=>item.event==='DESTINATION_CHANGED'&&item.toDesti
 assert(h.emitted.some(item=>item.name==='config:changed'&&item.payload.reason==='settings-saved'),'Save publishes explicit config event');checks.push('Config event');
 
 await h.dispatch('#settingsBtn','click');
-h.element('#cfgDestination').value='primary';await h.dispatch('#cfgDestination','change');await h.dispatch('#saveSettingsBtn','click');
+h.element('#cfgDestination').value='primary';
+await h.dispatch('#cfgDestination','change');
 config=h.config();
-assert(config.activeDestinationId==='primary'&&config.school.name==='Escuela principal','Saving selection switches active destination');checks.push('Switch active');
+assert(config.activeDestinationId==='primary'&&config.school.name==='Escuela principal','Selecting a saved destination activates it immediately');checks.push('Immediate destination activation');
+assert(h.emitted.some(item=>item.name==='config:changed'&&item.payload.reason==='destination-selected'&&item.payload.config.activeDestinationId==='primary'),'Destination selection publishes config event immediately');checks.push('Immediate config event');
+assert(h.element('#cfgSchoolName').value==='Escuela principal'&&String(h.element('#cfgLat').value)==='19','Selecting saved destination restores its fields');checks.push('Restore fields');
+await h.dispatch('#saveSettingsBtn','click');
+config=h.config();
+assert(config.activeDestinationId==='primary'&&config.school.name==='Escuela principal','Saving edits keeps selected destination active');checks.push('Switch active');
 assert(config.destinations.some(item=>item.id===secondId&&item.name==='Destino auto'),'Switching back does not delete alternate destination');checks.push('Alternate retained');
 
 h.element('#cfgLat').value='19.25';await h.dispatch('#latMinusBtn','click');assert(h.element('#cfgLat').value==='-19.25','Coordinate sign helper works');checks.push('Coordinate helper');
