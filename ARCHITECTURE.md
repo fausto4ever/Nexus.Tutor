@@ -24,6 +24,7 @@ Esta rama parte del commit estable `47b8524` y prioriza separación de responsab
 8. Todo cambio estructural debe mantener `scripts/test-startup.mjs` verde.
 9. El build final debe ejecutar pruebas contra el orden real de scripts y validar los assets de `dist`.
 10. El navegador debe cargar un solo stylesheet local; `foundation.css` y `application.css` no deben reaparecer como capas independientes.
+11. `scripts/test-css.mjs` impide que la deuda CSS supere la línea base optimizada: 156 declaraciones `!important` y 61 selectores repetidos. Todo trabajo posterior debe mantener o reducir esos valores.
 
 ## Migraciones completadas
 
@@ -36,9 +37,10 @@ Esta rama parte del commit estable `47b8524` y prioriza separación de responsab
 - El arranque integrado valida IDs reales del HTML, orden real de scripts y que `Guardar cambios` y `Voy por mi hijo` tengan exactamente un propietario.
 - El monolito `app.js` fue retirado de la rama; el recorrido vive exclusivamente en `features/journey.js`.
 - La doble cascada `foundation.css` + `application.css` fue consolidada en `css/nexus-tutor.css`. Build, service worker y CI generan/validan un único `nexus-tutor.min.css` y rechazan referencias a los CSS legacy.
+- La fuente consolidada fue pasada por el mismo CleanCSS `level:2` utilizado en producción y guardada en formato legible. Los selectores repetidos bajaron de 68 a 61 sin cambiar la salida efectiva de producción.
 
 ## Deuda aún deliberadamente conservada
 
-`css/nexus-tutor.css` conserva en esta primera consolidación el orden efectivo de la cascada validada en dispositivo. Ya no hay doble propietario ni dos hojas compitiendo. La limpieza fina de declaraciones repetidas dentro del archivo y de `!important` se hará como una fase independiente, con comparación visual, porque algunos `!important` todavía son funcionales (por ejemplo, reglas que deben imponerse a estilos inline de los marcadores).
+`css/nexus-tutor.css` conserva 156 declaraciones `!important`. Ya no son deuda causada únicamente por dos archivos compitiendo: algunas siguen siendo funcionales —por ejemplo reglas que deben imponerse a estilos inline de los marcadores, visibilidad y reduced-motion— y el resto se retirará por componente con comparación visual. CI impide que este número o los 61 selectores repetidos vuelvan a aumentar.
 
 `features/journey.js` aún concentra máquina de estados, polling, telemetría y render de Recorrido. Esa concentración es aceptable mientras cada responsabilidad externa (GPS, configuración, shell) permanezca fuera del controlador.
