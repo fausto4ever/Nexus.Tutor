@@ -7,6 +7,18 @@ import { minify as minifyHtml } from 'html-minifier-terser';
 
 const root=process.cwd();
 const dist=path.join(root,'dist');
+const JS_ASSETS=[
+  ['config.js','config.min.js'],
+  ['core/runtime.js','runtime.min.js'],
+  ['services/location.js','location.min.js'],
+  ['services/distance.js','distance.min.js'],
+  ['services/telemetry.js','telemetry.min.js'],
+  ['features/destinations.js','destinations.min.js'],
+  ['ui/journey-view.js','journey-view.min.js'],
+  ['features/journey.js','journey.min.js'],
+  ['ui/shell.js','shell.min.js']
+];
+const CSS_ASSETS=[['css/nexus-tutor.css','nexus-tutor.min.css']];
 
 await fs.rm(dist,{recursive:true,force:true});
 await fs.mkdir(dist,{recursive:true});
@@ -21,31 +33,13 @@ if(!configSource.includes(`version:'${version}'`))throw new Error('La versión d
 
 async function buildJs(input,output){
   const source=await read(input);
-  const minified=await minifyJs(source,{
-    compress:{passes:2,drop_console:false},
-    mangle:true,
-    format:{comments:false},
-    sourceMap:false
-  });
+  const minified=await minifyJs(source,{compress:{passes:2,drop_console:false},mangle:true,format:{comments:false},sourceMap:false});
   if(!minified.code)throw new Error(`No se pudo minificar ${input}`);
   const obfuscated=JavaScriptObfuscator.obfuscate(minified.code,{
-    compact:true,
-    simplify:true,
-    identifierNamesGenerator:'hexadecimal',
-    renameGlobals:false,
-    stringArray:true,
-    stringArrayEncoding:['base64'],
-    stringArrayThreshold:0.75,
-    rotateStringArray:true,
-    shuffleStringArray:true,
-    splitStrings:true,
-    splitStringsChunkLength:8,
-    transformObjectKeys:false,
-    controlFlowFlattening:false,
-    deadCodeInjection:false,
-    selfDefending:false,
-    disableConsoleOutput:false,
-    sourceMap:false
+    compact:true,simplify:true,identifierNamesGenerator:'hexadecimal',renameGlobals:false,
+    stringArray:true,stringArrayEncoding:['base64'],stringArrayThreshold:0.75,rotateStringArray:true,shuffleStringArray:true,
+    splitStrings:true,splitStringsChunkLength:8,transformObjectKeys:false,controlFlowFlattening:false,deadCodeInjection:false,
+    selfDefending:false,disableConsoleOutput:false,sourceMap:false
   }).getObfuscatedCode();
   await write(output,obfuscated);
 }
@@ -57,51 +51,24 @@ async function buildCss(input,output){
   await write(output,result.styles);
 }
 
-await buildJs('config.js','config.min.js');
-await buildJs('app.js','app.min.js');
-await buildJs('coordinates.js','coordinates.min.js');
-await buildJs('ui.js','ui.min.js');
-await buildCss('styles.css','styles.min.css');
-await buildCss('ui.css','ui.min.css');
+for(const [input,output] of JS_ASSETS)await buildJs(input,output);
+for(const [input,output] of CSS_ASSETS)await buildCss(input,output);
 
 let html=await read('index.html');
 if(!html.includes(`CONTROL DE ACCESO · v${version}</div>`))throw new Error('La versión visible no coincide con package.json');
-html=html
-  .replace('href="styles.css"','href="styles.min.css"')
-  .replace('href="ui.css"','href="ui.min.css"')
-  .replace('src="config.js"','src="config.min.js"')
-  .replace('src="app.js"','src="app.min.js"')
-  .replace('src="coordinates.js"','src="coordinates.min.js"')
-  .replace('src="ui.js"','src="ui.min.js"');
+for(const [input,output] of [...CSS_ASSETS,...JS_ASSETS]){
+  html=html.replaceAll(`href="${input}"`,`href="${output}"`).replaceAll(`src="${input}"`,`src="${output}"`);
+}
 html=html.replace(/((?:src|href)=")([^"]+\.(?:js|css))"/g,(_,prefix,asset)=>`${prefix}${asset}?v=${version}"`);
-html=await minifyHtml(html,{
-  collapseWhitespace:true,
-  removeComments:true,
-  removeRedundantAttributes:true,
-  removeEmptyAttributes:true,
-  minifyCSS:true,
-  minifyJS:true,
-  sortAttributes:false,
-  sortClassName:false
-});
+html=await minifyHtml(html,{collapseWhitespace:true,removeComments:true,removeRedundantAttributes:true,removeEmptyAttributes:true,minifyCSS:true,minifyJS:true,sortAttributes:false,sortClassName:false});
 await write('index.html',html);
 
 const swSource=await read('sw.js');
 if(!swSource.includes(`nexus-tutor-${version}'`))throw new Error('La versión de caché no coincide con package.json');
-const swProd=swSource
-  .replace("'./styles.css'","'./styles.min.css'")
-  .replace("'./ui.css'","'./ui.min.css'")
-  .replace("'./config.js'","'./config.min.js'")
-  .replace("'./app.js'","'./app.min.js'")
-  .replace("'./coordinates.js'","'./coordinates.min.js'")
-  .replace("'./ui.js'","'./ui.min.js'")
-  .replace(/'(\.\/[^']+\.(?:js|css))'/g,(_,asset)=>`'${asset}?v=${version}'`);
-const swMinified=await minifyJs(swProd,{
-  compress:{passes:2},
-  mangle:true,
-  format:{comments:false},
-  sourceMap:false
-});
+let swProd=swSource;
+for(const [input,output] of [...CSS_ASSETS,...JS_ASSETS])swProd=swProd.replaceAll(`'./${input}'`,`'./${output}'`);
+swProd=swProd.replace(/'(\.\/[^']+\.(?:js|css))'/g,(_,asset)=>`'${asset}?v=${version}'`);
+const swMinified=await minifyJs(swProd,{compress:{passes:2},mangle:true,format:{comments:false},sourceMap:false});
 if(!swMinified.code)throw new Error('No se pudo minificar sw.js');
 await write('sw.js',swMinified.code);
 
@@ -110,11 +77,10 @@ await fs.copyFile(path.join(root,'icon.svg'),path.join(dist,'icon.svg'));
 
 const files=await fs.readdir(dist);
 if(files.some(name=>name.endsWith('.map')))throw new Error('El build contiene sourcemaps');
-if(files.some(name=>['app.js','config.js','coordinates.js','ui.js','styles.css','ui.css'].includes(name)))throw new Error('El build contiene archivos fuente sin minificar');
-
-for(const asset of ['app.min.js','config.min.js','coordinates.min.js','ui.min.js','styles.min.css','ui.min.css']){
-  const versioned=`${asset}?v=${version}`;
-  if(!html.includes(versioned)||!swProd.includes(versioned))throw new Error(`Referencia sin versión: ${asset}`);
+for(const [,output] of [...JS_ASSETS,...CSS_ASSETS]){
+  const versioned=`${output}?v=${version}`;
+  if(!files.includes(output))throw new Error(`Falta asset compilado: ${output}`);
+  if(!html.includes(versioned)||!swProd.includes(versioned))throw new Error(`Referencia sin versión: ${output}`);
 }
 if(/<script\b(?![^>]*\bsrc=)[^>]*>/i.test(html)||/<style\b/i.test(html))throw new Error('El HTML contiene JS/CSS inline');
 
