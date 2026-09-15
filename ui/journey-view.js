@@ -61,18 +61,21 @@
 
   function renderLocationState({measurementState,manualDistanceEnabled,latestDistance,latestSource}){
     if(measurementState==='RECALCULATING'){
-      elements.distanceSource.textContent='↻ Recalculando · última ubicación';
+      elements.distanceSource.textContent='Recalculando ubicación…';
       elements.distanceSource.dataset.state='recalculating';
+      elements.distanceSource.setAttribute('aria-label','Recalculando ubicación. Se conserva la última lectura mientras llega una nueva.');
       return;
     }
     if(manualDistanceEnabled||measurementState==='FRESH'){
-      const source=latestSource==='manual'?'manual':latestSource==='driving'?'ruta en auto':latestSource==='direct-fallback'?'directa · ruta no disponible':'distancia directa';
-      elements.distanceSource.textContent=`● Activo · ${source}`;
+      const source=latestSource==='manual'?'Distancia manual':latestSource==='driving'?'Ruta en auto':latestSource==='direct-fallback'?'Ruta no disponible · directa':'Distancia directa';
+      elements.distanceSource.textContent=source;
       elements.distanceSource.dataset.state='active';
+      elements.distanceSource.setAttribute('aria-label',`Activo. ${source}`);
       return;
     }
-    elements.distanceSource.textContent=Number.isFinite(latestDistance)?'○ Inactivo · última ubicación':'○ Inactivo';
+    elements.distanceSource.textContent=Number.isFinite(latestDistance)?'Última ubicación conocida':'Esperando ubicación';
     elements.distanceSource.dataset.state='inactive';
+    elements.distanceSource.setAttribute('aria-label',Number.isFinite(latestDistance)?'Inactivo. Se muestra la última ubicación conocida.':'Inactivo. Esperando ubicación.');
   }
 
   function render(model){
