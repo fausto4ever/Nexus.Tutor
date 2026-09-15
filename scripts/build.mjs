@@ -11,8 +11,8 @@ const JS_ASSETS=[
   ['config.js','config.min.js'],
   ['core/runtime.js','runtime.min.js'],
   ['services/location.js','location.min.js'],
-  ['app.js','app.min.js'],
   ['features/destinations.js','destinations.min.js'],
+  ['features/journey.js','journey.min.js'],
   ['ui/shell.js','shell.min.js']
 ];
 const CSS_ASSETS=[
