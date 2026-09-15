@@ -11,16 +11,17 @@
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="ui.css">
 </head>
 <body>
   <main class="app-shell">
     <header class="topbar">
-      <div class="brand-block">
+      <div class="brand-block parent-brand">
         <div class="eyebrow">CONTROL DE ACCESO · v0.1.9</div>
-        <h1>Nexus.Tutor</h1>
+        <h1 id="headerSchoolName">Instituto Ausbel</h1>
+        <div class="powered-by">Powered by <span class="brand-wordmark brand-inline" aria-label="Nexus.Tutor"><span class="brand-nexus">Nexus</span><span class="brand-dot">.</span><span class="brand-tutor">Tutor</span></span></div>
       </div>
       <div class="topbar-actions">
         <span id="connectionBadge" class="badge badge-ok connection-badge">● En línea</span>
@@ -45,9 +46,10 @@
         <section class="distance-card card">
           <div class="distance-label">Distancia al destino</div>
           <div class="distance-value"><span id="distanceValue">—</span><span id="distanceUnit">m</span></div>
-          <div class="distance-meta">
+          <div class="distance-meta parent-distance-meta">
             <span>Precisión GPS <strong id="accuracyValue">—</strong></span>
             <span id="distanceSource">Esperando ubicación</span>
+            <span id="gpsHealthBadge" class="gps-health-badge gps-off" role="status" aria-live="polite"><span class="gps-dot" aria-hidden="true"></span><span class="gps-health-text">GPS esperando</span></span>
           </div>
           <div class="progress-track" aria-hidden="true"><div id="distanceProgress" class="progress-bar"></div></div>
           <div class="threshold-row threshold-scale" aria-label="Umbrales de proximidad">
@@ -85,8 +87,16 @@
         </section>
 
         <section class="status-card card">
-          <span class="muted">Estado del recorrido</span>
-          <div id="statusPill" role="status" aria-live="polite" class="status-pill status-outside">UBICACIÓN PENDIENTE</div>
+          <div class="route-status-head">
+            <div>
+              <span class="muted">Estado del recorrido</span>
+              <div id="statusPill" role="status" aria-live="polite" class="status-pill status-outside">UBICACIÓN PENDIENTE</div>
+            </div>
+            <div id="routeTimer" class="route-timer hidden" aria-live="polite">
+              <span id="routeTimerLabel">Tiempo de recorrido</span>
+              <strong id="routeTimerValue">00:00</strong>
+            </div>
+          </div>
           <p id="statusMessage">Esperando una medición GPS válida.</p>
           <div class="sync-row">
             <span>Próxima medición</span>
@@ -105,6 +115,11 @@
           </button>
           <p id="actionHint" class="action-hint">Esperando ubicación GPS…</p>
           <button id="resetJourneyBtn" class="secondary-btn reset-btn" type="button">Reiniciar recorrido</button>
+        </section>
+
+        <section class="card route-memory-card">
+          <span class="muted">Tu referencia de tiempo</span>
+          <p id="lastRouteSummary">Tu tiempo de recorrido aparecerá aquí después de tu primera llegada.</p>
         </section>
 
         <section class="log-card card">
