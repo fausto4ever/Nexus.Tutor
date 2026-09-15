@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Mantener el comportamiento funcional validado de Nexus.Tutor mientras reducimos deuda técnica y dejamos límites claros entre almacenamiento, geolocalización, destinos, recorrido y presentación.
+Mantener el comportamiento funcional validado de Nexus.Tutor mientras reducimos deuda técnica y dejamos límites claros entre almacenamiento, geolocalización, cálculo de distancia, telemetría, destinos, recorrido y presentación.
 
 ## Capas actuales
 
@@ -32,6 +32,34 @@ Responsabilidades:
 
 Ningún otro módulo debe monkey-patchear `navigator.geolocation` ni simular eventos de foco.
 
+### `services/distance.js`
+
+Único propietario del cálculo físico de distancia.
+
+Responsabilidades:
+
+- validación de coordenadas del destino;
+- Haversine para distancia directa;
+- consulta OSRM para ruta en auto;
+- timeout de OSRM;
+- fallback automático a Haversine;
+- modo manual para laboratorio.
+
+`features/journey.js` no contiene Haversine ni conoce la URL de OSRM.
+
+### `services/telemetry.js`
+
+Propietario del almacenamiento de historial y telemetría.
+
+Responsabilidades:
+
+- historial local del recorrido;
+- telemetría local;
+- límites de retención;
+- exportación JSON.
+
+`features/journey.js` y `features/destinations.js` producen eventos, pero no administran directamente las claves de historial/telemetría.
+
 ### `features/destinations.js`
 
 Único propietario de:
@@ -47,21 +75,39 @@ Ningún otro módulo debe monkey-patchear `navigator.geolocation` ni simular eve
 
 Durante un recorrido activo, los controles editables del diálogo quedan bloqueados. El diálogo puede abrirse para consultar la configuración, pero no modificarla.
 
+### `ui/journey-view.js`
+
+Propietario de la presentación del recorrido.
+
+Responsabilidades:
+
+- referencias DOM de la pantalla Recorrido;
+- distancia, precisión y fuente;
+- barra de progreso y marcadores;
+- estado y mensajes visibles;
+- botón principal y reinicio;
+- simulador visual;
+- historial visible;
+- indicador de conectividad;
+- cuenta regresiva.
+
+La vista recibe estado ya calculado y no decide transiciones de negocio.
+
 ### `features/journey.js`
 
-Actualmente coordina:
+Queda como coordinador del caso de uso del recorrido.
 
-- máquina de estados del recorrido;
-- cálculo de distancia;
+Responsabilidades:
+
+- máquina de estados;
+- inicio, reinicio y finalización;
+- promoción monotónica de estado;
 - polling;
-- GPS y reanudación;
-- simulación manual;
-- render de la pantalla de recorrido;
-- historial y telemetría;
-- conectividad;
-- finalización del recorrido.
-
-Este archivo sigue siendo el siguiente candidato a división por responsabilidades. Esa división se hará después de estabilizar esta base, sin cambiar comportamiento.
+- ciclo de GPS y reanudación;
+- simulación manual como fuente de medición;
+- coordinación entre `location`, `distance`, `telemetry` y `journey-view`;
+- reacción a `config:changed`;
+- hook futuro `window.NEXUS_TUTOR_COMPLETE_JOURNEY`.
 
 Reglas de estado:
 
@@ -86,6 +132,18 @@ Propietario de:
 - tema claro/oscuro;
 - persistencia de pestaña y tema;
 - seguimiento de `prefers-color-scheme` mientras el usuario no haya elegido un tema manualmente.
+
+## Orden de arranque
+
+1. `config.js`
+2. `core/runtime.js`
+3. `services/location.js`
+4. `services/distance.js`
+5. `services/telemetry.js`
+6. `features/destinations.js`
+7. `ui/journey-view.js`
+8. `features/journey.js`
+9. `ui/shell.js`
 
 ## CSS
 
@@ -115,7 +173,10 @@ No deben reaparecer `foundation.css`, `application.css`, `styles.css` ni `ui.css
 - `config.js → config.min.js`
 - `core/runtime.js → runtime.min.js`
 - `services/location.js → location.min.js`
+- `services/distance.js → distance.min.js`
+- `services/telemetry.js → telemetry.min.js`
 - `features/destinations.js → destinations.min.js`
+- `ui/journey-view.js → journey-view.min.js`
 - `features/journey.js → journey.min.js`
 - `ui/shell.js → shell.min.js`
 - `css/nexus-tutor.css → nexus-tutor.min.css`
@@ -124,10 +185,10 @@ El build de producción no genera sourcemaps.
 
 ## Pruebas
 
-- `test-startup.mjs`: orden real de scripts y propietarios únicos de acciones principales.
-- `test-history.mjs`: recorrido, estados, polling, GPS, historial y telemetría.
-- `test-destinations.mjs`: destinos, configuración, selección inmediata y bloqueo durante recorrido.
-- `test-ui.mjs`: estructura de cuatro pestañas, tema, stylesheet único y componentes visuales base.
+- `test-startup.mjs`: orden real de los nueve scripts y propietarios únicos de acciones principales.
+- `test-history.mjs`: ejecuta los módulos reales de distancia, telemetría, vista y recorrido para validar estados, polling, GPS, historial y telemetría.
+- `test-destinations.mjs`: destinos, configuración, selección inmediata, telemetría compartida y bloqueo durante recorrido.
+- `test-ui.mjs`: estructura de cuatro pestañas, tema, stylesheet único y fronteras de responsabilidad del recorrido.
 - `test-css.mjs`: exige un único CSS fuente, 0 `!important`, ausencia de CSS legacy, foco visible y reduced motion.
 
 ## Política de rama
