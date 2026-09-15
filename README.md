@@ -108,6 +108,6 @@ El desarrollo actual continúa en la rama existente:
 
 `refactor/0.1.9-structure`
 
-No crear ramas nuevas salvo instrucción explícita.
+No crear ramas nuevas salvo instrucción explícita del usuario.
 
 No mergear ni publicar en `main` sin autorización explícita.
