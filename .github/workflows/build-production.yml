@@ -51,7 +51,10 @@ jobs:
           test -f dist/config.min.js
           test -f dist/runtime.min.js
           test -f dist/location.min.js
+          test -f dist/distance.min.js
+          test -f dist/telemetry.min.js
           test -f dist/destinations.min.js
+          test -f dist/journey-view.min.js
           test -f dist/journey.min.js
           test -f dist/shell.min.js
           test -f dist/nexus-tutor.min.css
@@ -69,7 +72,10 @@ jobs:
           grep -q 'config.min.js' dist/index.html
           grep -q 'runtime.min.js' dist/index.html
           grep -q 'location.min.js' dist/index.html
+          grep -q 'distance.min.js' dist/index.html
+          grep -q 'telemetry.min.js' dist/index.html
           grep -q 'destinations.min.js' dist/index.html
+          grep -q 'journey-view.min.js' dist/index.html
           grep -q 'journey.min.js' dist/index.html
           grep -q 'shell.min.js' dist/index.html
           grep -q 'nexus-tutor.min.css' dist/index.html
