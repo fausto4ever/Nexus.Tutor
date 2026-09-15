@@ -104,9 +104,11 @@
       elements.distanceValue.textContent='—';elements.distanceUnit.textContent='m';elements.distanceProgress.style.width='0%';
     }
 
-    if(manualDistanceEnabled)elements.accuracyValue.textContent='Simulada';
-    else if(Number.isFinite(latestAccuracy))elements.accuracyValue.textContent=`±${Math.round(latestAccuracy)} m${measurementState==='FRESH'?'':' · última'}`;
-    else elements.accuracyValue.textContent='—';
+    if(manualDistanceEnabled)elements.accuracyValue.textContent='Simulada · ● Activo';
+    else if(Number.isFinite(latestAccuracy)){
+      const stateLabel=measurementState==='RECALCULATING'?'↻ Recalculando':measurementState==='FRESH'?'● Activo':'○ Inactivo';
+      elements.accuracyValue.textContent=`±${Math.round(latestAccuracy)} m · ${stateLabel}`;
+    }else elements.accuracyValue.textContent=measurementState==='RECALCULATING'?'↻ Recalculando':measurementState==='FRESH'?'● Activo':'○ Inactivo';
 
     renderLocationState({measurementState,manualDistanceEnabled,latestDistance,latestSource});
 
