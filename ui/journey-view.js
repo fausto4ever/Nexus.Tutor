@@ -5,15 +5,17 @@
   const $=selector=>RUNTIME.dom.one(selector);
 
   RUNTIME.dom.require([
-    '#schoolName','#schoolLock','#schoolCoords','#connectionBadge','#distanceValue','#distanceUnit','#gpsBadge','#accuracyValue','#distanceSource','#distanceProgress',
+    '#schoolName','#schoolLock','#schoolCoords','#connectionBadge','#distanceValue','#distanceUnit','#gpsBadge','#wakeLockBadge','#accuracyValue','#distanceSource','#distanceProgress',
     '#waitingMarker','#readyMarker','#gateMarker','#waitingLabel','#readyLabel','#gateLabel','#statusPill','#statusMessage','#countdown','#lastUpdate',
     '#pickupBtn','#pickupBtnText','#actionHint','#resetJourneyBtn','#eventLog','#clearLogBtn','#downloadTelemetryBtn',
     '#manualDistanceToggle','#manualDistanceControls','#manualDistanceInput','#manualDistanceMinus','#manualDistancePlus','#manualDistanceStep'
   ]);
 
   const elements={
-    schoolName:$('#schoolName'),schoolLock:$('#schoolLock'),schoolCoords:$('#schoolCoords'),connectionBadge:$('#connectionBadge'),distanceValue:$('#distanceValue'),distanceUnit:$('#distanceUnit'),gpsBadge:$('#gpsBadge'),accuracyValue:$('#accuracyValue'),distanceSource:$('#distanceSource'),distanceProgress:$('#distanceProgress'),waitingMarker:$('#waitingMarker'),readyMarker:$('#readyMarker'),gateMarker:$('#gateMarker'),waitingLabel:$('#waitingLabel'),readyLabel:$('#readyLabel'),gateLabel:$('#gateLabel'),statusPill:$('#statusPill'),statusMessage:$('#statusMessage'),countdown:$('#countdown'),lastUpdate:$('#lastUpdate'),pickupBtn:$('#pickupBtn'),pickupBtnText:$('#pickupBtnText'),actionHint:$('#actionHint'),resetJourneyBtn:$('#resetJourneyBtn'),eventLog:$('#eventLog'),clearLogBtn:$('#clearLogBtn'),downloadTelemetryBtn:$('#downloadTelemetryBtn'),manualDistanceToggle:$('#manualDistanceToggle'),manualDistanceControls:$('#manualDistanceControls'),manualDistanceInput:$('#manualDistanceInput'),manualDistanceMinus:$('#manualDistanceMinus'),manualDistancePlus:$('#manualDistancePlus'),manualDistanceStep:$('#manualDistanceStep')
+    schoolName:$('#schoolName'),schoolLock:$('#schoolLock'),schoolCoords:$('#schoolCoords'),connectionBadge:$('#connectionBadge'),distanceValue:$('#distanceValue'),distanceUnit:$('#distanceUnit'),gpsBadge:$('#gpsBadge'),wakeLockBadge:$('#wakeLockBadge'),accuracyValue:$('#accuracyValue'),distanceSource:$('#distanceSource'),distanceProgress:$('#distanceProgress'),waitingMarker:$('#waitingMarker'),readyMarker:$('#readyMarker'),gateMarker:$('#gateMarker'),waitingLabel:$('#waitingLabel'),readyLabel:$('#readyLabel'),gateLabel:$('#gateLabel'),statusPill:$('#statusPill'),statusMessage:$('#statusMessage'),countdown:$('#countdown'),lastUpdate:$('#lastUpdate'),pickupBtn:$('#pickupBtn'),pickupBtnText:$('#pickupBtnText'),actionHint:$('#actionHint'),resetJourneyBtn:$('#resetJourneyBtn'),eventLog:$('#eventLog'),clearLogBtn:$('#clearLogBtn'),downloadTelemetryBtn:$('#downloadTelemetryBtn'),manualDistanceToggle:$('#manualDistanceToggle'),manualDistanceControls:$('#manualDistanceControls'),manualDistanceInput:$('#manualDistanceInput'),manualDistanceMinus:$('#manualDistanceMinus'),manualDistancePlus:$('#manualDistancePlus'),manualDistanceStep:$('#manualDistanceStep')
   };
+
+  let wakeLock=null,wakeLockRequest=null,wakeLockState=('wakeLock'in navigator&&typeof navigator.wakeLock?.request==='function')?'INACTIVE':'UNSUPPORTED';
 
   function escapeHtml(value){return String(value??'').replace(/[&<>'\"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));}
   function formatDistance(value){
@@ -58,6 +60,55 @@
   }
   function setCountdown(value){elements.countdown.textContent=value;}
   function setActionHint(value){elements.actionHint.textContent=value;}
+
+  function renderWakeLockState(){
+    if(wakeLockState==='ACTIVE'){
+      elements.wakeLockBadge.textContent='● Pantalla activa';
+      elements.wakeLockBadge.className='badge badge-ok';
+      elements.wakeLockBadge.setAttribute('aria-label','Pantalla mantenida activa durante el recorrido.');
+      return;
+    }
+    if(wakeLockState==='REQUESTING'){
+      elements.wakeLockBadge.textContent='↻ Activando pantalla';
+      elements.wakeLockBadge.className='badge badge-warn';
+      elements.wakeLockBadge.setAttribute('aria-label','Solicitando mantener la pantalla activa.');
+      return;
+    }
+    if(wakeLockState==='UNSUPPORTED'){
+      elements.wakeLockBadge.textContent='○ Sin Wake Lock';
+      elements.wakeLockBadge.className='badge badge-warn';
+      elements.wakeLockBadge.setAttribute('aria-label','Este navegador no permite mantener la pantalla activa mediante Wake Lock.');
+      return;
+    }
+    elements.wakeLockBadge.textContent='○ Pantalla normal';
+    elements.wakeLockBadge.className='badge badge-warn';
+    elements.wakeLockBadge.setAttribute('aria-label','La pantalla puede apagarse normalmente.');
+  }
+
+  async function syncWakeLock(journey){
+    const shouldHold=Boolean(journey?.active&&journey.status!=='COMPLETED'&&document.visibilityState!=='hidden');
+    if(!('wakeLock'in navigator)||typeof navigator.wakeLock?.request!=='function'){
+      wakeLockState='UNSUPPORTED';renderWakeLockState();return;
+    }
+    if(!shouldHold){
+      const current=wakeLock;wakeLock=null;
+      if(current&&!current.released){try{await current.release();}catch{}}
+      wakeLockState='INACTIVE';renderWakeLockState();return;
+    }
+    if(wakeLock&&!wakeLock.released){wakeLockState='ACTIVE';renderWakeLockState();return;}
+    if(wakeLockRequest)return;
+    wakeLockState='REQUESTING';renderWakeLockState();
+    wakeLockRequest=navigator.wakeLock.request('screen').then(lock=>{
+      wakeLock=lock;wakeLockState='ACTIVE';renderWakeLockState();
+      lock.addEventListener?.('release',()=>{
+        if(wakeLock===lock)wakeLock=null;
+        wakeLockState='INACTIVE';renderWakeLockState();
+      });
+    }).catch(error=>{
+      console.warn('Wake Lock no disponible',error);wakeLockState='INACTIVE';renderWakeLockState();
+    }).finally(()=>{wakeLockRequest=null;});
+    return wakeLockRequest;
+  }
 
   function renderLocationState({measurementState,manualDistanceEnabled,latestDistance,latestSource}){
     if(manualDistanceEnabled){
@@ -105,6 +156,7 @@
     elements.gateLabel.textContent=`${thresholds.atGateMeters} m`;
     positionMarkers(thresholds);
     renderConnection(onlineState);
+    void syncWakeLock(journey);
 
     if(schoolReady){
       elements.schoolLock.textContent='Fijada';elements.schoolLock.className='badge badge-ok';
