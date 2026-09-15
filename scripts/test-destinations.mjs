@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 
 function assert(condition,message){if(!condition)throw Error(message);}
 
-function createHarness(source){
+function createHarness(source,telemetrySource){
   const stored=new Map(),elements=new Map(),events=new Map(),emitted=[];
   let currentPosition={coords:{latitude:19.77,longitude:-101.21,accuracy:8}};
   const element=selector=>{
@@ -20,9 +20,10 @@ function createHarness(source){
     dom:{one:selector=>element(selector),require:()=>true}
   };
   const location={current:()=>currentPosition};
-  const document={visibilityState:'visible',querySelector:selector=>element(selector)};
+  const document={visibilityState:'visible',querySelector:selector=>element(selector),body:{appendChild(){}},createElement:()=>({click(){},remove(){}})};
   const navigator={onLine:true};
   const win={NEXUS_TUTOR_DEFAULTS:defaults,NEXUS_TUTOR_RUNTIME:runtime,NEXUS_TUTOR_LOCATION:location};
+  new Function('window',telemetrySource)(win);
   new Function('window','document','navigator','localStorage','Date',source)(win,document,navigator,localStorage,Date);
 
   async function dispatch(selector,name,event={}){
@@ -38,8 +39,11 @@ function createHarness(source){
   };
 }
 
-const source=await fs.readFile(new URL('../features/destinations.js',import.meta.url),'utf8');
-const h=createHarness(source),checks=[];
+const [source,telemetrySource]=await Promise.all([
+  fs.readFile(new URL('../features/destinations.js',import.meta.url),'utf8'),
+  fs.readFile(new URL('../services/telemetry.js',import.meta.url),'utf8')
+]);
+const h=createHarness(source,telemetrySource),checks=[];
 
 let config=h.config();
 assert(config.destinations.length===1&&config.destinations[0].id==='primary','Legacy/default destination must migrate to primary');checks.push('Primary migration');
@@ -86,7 +90,7 @@ h.element('#cfgLat').value='19.25';await h.dispatch('#latMinusBtn','click');asse
 await h.dispatch('#settingsBtn','click');await h.dispatch('#useCurrentAsSchoolBtn','click');assert(h.element('#cfgLat').value==='19.77'&&h.element('#cfgLng').value==='-101.21','Current location comes from location service');checks.push('Location service reuse');
 
 h.setJourney({active:true,id:'journey-test',status:'WAITING'});await h.dispatch('#settingsBtn','click');
-assert(h.element('#cfgDestination').disabled&&h.element('#addDestinationBtn').disabled&&h.element('#cfgLat').disabled&&h.element('#cfgLng').disabled,'Destination controls lock during active journey');checks.push('Active journey lock');
+assert(h.element('#cfgDestination').disabled&&h.element('#addDestinationBtn').disabled&&h.element('#cfgLat').disabled&&h.element('#cfgLng').disabled&&h.element('#latMinusBtn').disabled&&h.element('#lngMinusBtn').disabled&&h.element('#cfgWaiting').disabled&&h.element('#cfgDistanceMode').disabled&&h.element('#saveSettingsBtn').disabled,'Destination and operational controls lock during active journey');checks.push('Active journey lock');
 const before=JSON.stringify(h.config());h.element('#cfgSchoolName').value='Cambio indebido';await h.dispatch('#saveSettingsBtn','click');
 assert(JSON.stringify(h.config())===before&&h.element('#settingsError').textContent.includes('No puedes modificar'),'Single owner blocks saves during active journey');checks.push('Active save blocked');
 
