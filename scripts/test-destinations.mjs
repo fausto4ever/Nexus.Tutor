@@ -15,7 +15,7 @@ function createHarness(source){
   const navigator={onLine:true};
   const win={NEXUS_TUTOR_DEFAULTS:defaults};
 
-  // Simula los listeners que app.js registra antes de coordinates.js.
+  // Simula los listeners que app.js registra antes del feature de destinos.
   element('#settingsBtn').addEventListener('click',()=>{
     const config=JSON.parse(localStorage.getItem('nexusTutorConfigV1')||'{}');
     const school={...defaults.school,...(config.school||{})};
@@ -47,7 +47,7 @@ function createHarness(source){
   };
 }
 
-const source=await fs.readFile(new URL('../coordinates.js',import.meta.url),'utf8');
+const source=await fs.readFile(new URL('../features/destinations.js',import.meta.url),'utf8');
 const h=createHarness(source);
 const checks=[];
 
