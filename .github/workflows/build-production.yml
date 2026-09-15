@@ -9,15 +9,17 @@ on:
     paths:
       - 'app.js'
       - 'config.js'
-      - 'coordinates.js'
-      - 'styles.css'
+      - 'core/**'
+      - 'services/**'
+      - 'features/**'
+      - 'ui/**'
+      - 'css/**'
       - 'index.html'
       - 'sw.js'
       - 'manifest.webmanifest'
       - 'icon.svg'
       - 'package.json'
-      - 'scripts/build.mjs'
-      - 'scripts/test-history.mjs'
+      - 'scripts/**'
       - '.github/workflows/build-production.yml'
 
 permissions:
@@ -38,7 +40,7 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Test history
+      - name: Test
         run: npm test
 
       - name: Build production
@@ -47,22 +49,28 @@ jobs:
       - name: Validate production output
         run: |
           test -f dist/index.html
-          test -f dist/app.min.js
           test -f dist/config.min.js
-          test -f dist/coordinates.min.js
-          test -f dist/styles.min.css
+          test -f dist/runtime.min.js
+          test -f dist/location.min.js
+          test -f dist/app.min.js
+          test -f dist/destinations.min.js
+          test -f dist/shell.min.js
+          test -f dist/foundation.min.css
+          test -f dist/application.min.css
           test -f dist/sw.js
           test -f dist/manifest.webmanifest
           test -f dist/icon.svg
           ! find dist -type f -name '*.map' | grep -q .
           ! test -f dist/app.js
           ! test -f dist/config.js
-          ! test -f dist/coordinates.js
-          ! test -f dist/styles.css
-          grep -q 'app.min.js' dist/index.html
           grep -q 'config.min.js' dist/index.html
-          grep -q 'coordinates.min.js' dist/index.html
-          grep -q 'styles.min.css' dist/index.html
+          grep -q 'runtime.min.js' dist/index.html
+          grep -q 'location.min.js' dist/index.html
+          grep -q 'app.min.js' dist/index.html
+          grep -q 'destinations.min.js' dist/index.html
+          grep -q 'shell.min.js' dist/index.html
+          grep -q 'foundation.min.css' dist/index.html
+          grep -q 'application.min.css' dist/index.html
 
       - name: Commit dist
         if: github.event_name != 'pull_request'
