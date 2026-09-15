@@ -1,9 +1,20 @@
 (()=>{
   'use strict';
   const DEFAULTS=window.NEXUS_TUTOR_DEFAULTS||{};
+  const RUNTIME=window.NEXUS_TUTOR_RUNTIME;
+  const LOCATION=window.NEXUS_TUTOR_LOCATION;
+  if(!RUNTIME)throw new Error('RUNTIME_NOT_LOADED');
+  if(!LOCATION)throw new Error('LOCATION_SERVICE_NOT_LOADED');
   const CFG_KEY='nexusTutorConfigV1', JOURNEY_KEY='nexusTutorJourneyV1', LOG_KEY='nexusTutorLogV1', TELEMETRY_KEY='nexusTutorTelemetryV1';
   const STATUS_RANK={OUTSIDE:0,WAITING:1,READY:2,AT_GATE:3,COMPLETED:4};
-  const $=s=>document.querySelector(s);
+  const $=s=>RUNTIME.dom.one(s);
+  RUNTIME.dom.require([
+    '#schoolName','#schoolLock','#schoolCoords','#connectionBadge','#distanceValue','#distanceUnit','#accuracyValue','#distanceSource','#distanceProgress',
+    '#waitingMarker','#readyMarker','#gateMarker','#waitingLabel','#readyLabel','#gateLabel','#statusPill','#statusMessage','#countdown','#lastUpdate',
+    '#pickupBtn','#pickupBtnText','#actionHint','#resetJourneyBtn','#eventLog','#settingsDialog','#settingsBtn','#cfgSchoolName','#cfgLat','#cfgLng',
+    '#cfgWaiting','#cfgReady','#cfgGate','#cfgDistanceMode','#useCurrentAsSchoolBtn','#saveSettingsBtn','#settingsError','#clearLogBtn','#downloadTelemetryBtn',
+    '#manualDistanceToggle','#manualDistanceControls','#manualDistanceInput','#manualDistanceMinus','#manualDistancePlus','#manualDistanceStep'
+  ]);
   let config=loadConfig();
   let journey=loadJourney();
   let currentPosition=null;
@@ -200,16 +211,20 @@
     else{measurementState=Number.isFinite(latestDistance)?'STALE':'UNAVAILABLE';latestSource=journey.lastSource||'direct';recordTelemetry('MANUAL_MODE_OFF');render();if(currentPosition&&schoolReady())refreshMeasurement({allowPromotion:journey.active});}
   }
   function watchGps(){
-    if(!('geolocation'in navigator)){measurementState='UNAVAILABLE';els.actionHint.textContent='Este navegador no ofrece geolocalización.';recordTelemetry('GPS_NOT_AVAILABLE');return;}
-    navigator.geolocation.watchPosition(pos=>{
-      const recovering=measurementState==='UNAVAILABLE';currentPosition=pos;
-      if(!resumeRun&&schoolReady()&&!manualDistanceEnabled){
-        if(!journey.active||recovering)refreshMeasurement({allowPromotion:journey.active,recordMeasurement:journey.active&&recovering,measurementReason:recovering?'GPS recuperado':'Medición GPS'});
-      }
-    },err=>{
-      console.warn(err);if(manualDistanceEnabled)return;
-      currentPosition=null;measurementState='UNAVAILABLE';measurementRevision++;recordTelemetry('GPS_WATCH_ERROR',{errorCode:err?.code??null,error:String(err?.message||'GPS error')});render();
-    },{enableHighAccuracy:true,maximumAge:5000,timeout:15000});
+    if(!LOCATION.supported()){measurementState='UNAVAILABLE';els.actionHint.textContent='Este navegador no ofrece geolocalización.';recordTelemetry('GPS_NOT_AVAILABLE');return;}
+    LOCATION.watch({
+      onPosition:pos=>{
+        const recovering=measurementState==='UNAVAILABLE';currentPosition=pos;
+        if(!resumeRun&&schoolReady()&&!manualDistanceEnabled){
+          if(!journey.active||recovering)refreshMeasurement({allowPromotion:journey.active,recordMeasurement:journey.active&&recovering,measurementReason:recovering?'GPS recuperado':'Medición GPS'});
+        }
+      },
+      onError:err=>{
+        console.warn(err);if(manualDistanceEnabled)return;
+        currentPosition=null;measurementState='UNAVAILABLE';measurementRevision++;recordTelemetry('GPS_WATCH_ERROR',{errorCode:err?.code??null,error:String(err?.message||'GPS error')});render();
+      },
+      options:{enableHighAccuracy:true,maximumAge:5000,timeout:15000}
+    });
   }
   async function refreshOnReturn(){
     if(document.visibilityState==='hidden'||resumeRun||Date.now()-lastResumeAt<2000||!schoolReady())return;
@@ -219,8 +234,8 @@
     try{
       if(!run.manual){
         currentPosition=null;measurementState=Number.isFinite(latestDistance)?'RECALCULATING':'UNAVAILABLE';render();recordTelemetry('GPS_RECALCULATING');
-        if(!('geolocation'in navigator))throw new Error('GPS_NOT_AVAILABLE');
-        const pos=await new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:true,maximumAge:0,timeout:15000}));
+        if(!LOCATION.supported())throw new Error('GPS_NOT_AVAILABLE');
+        const pos=await LOCATION.fresh({enableHighAccuracy:true,maximumAge:0,timeout:15000});
         if(!isCurrent())return;currentPosition=pos;
       }
       if(!isCurrent())return;
