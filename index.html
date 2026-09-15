@@ -18,7 +18,7 @@
   <main class="app-shell">
     <header class="topbar">
       <div class="brand-block">
-        <div class="eyebrow">CONTROL DE ACCESO · v0.1.10</div>
+        <div class="eyebrow">CONTROL DE ACCESO · v0.1.11</div>
         <h1>Nexus.Tutor</h1>
       </div>
       <div class="topbar-actions">
@@ -42,10 +42,13 @@
         </section>
 
         <section class="distance-card card">
+          <div class="distance-meta" aria-label="Estado de navegación">
+            <span id="gpsBadge" class="badge badge-warn" role="status" aria-live="polite">○ GPS Inactivo</span>
+            <span id="wakeLockBadge" class="badge badge-warn" role="status" aria-live="polite">○ Pantalla normal</span>
+          </div>
           <div class="distance-label">Distancia al destino</div>
           <div class="distance-value"><span id="distanceValue">—</span><span id="distanceUnit">m</span></div>
           <div class="distance-meta">
-            <span id="gpsBadge" class="badge badge-warn" role="status" aria-live="polite">○ GPS Inactivo</span>
             <span>Precisión GPS <strong id="accuracyValue">—</strong></span>
             <span id="distanceSource">Esperando ubicación</span>
           </div>
