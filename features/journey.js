@@ -13,6 +13,7 @@
   if(!VIEW)throw new Error('JOURNEY_VIEW_NOT_LOADED');
 
   const CFG_KEY='nexusTutorConfigV1',JOURNEY_KEY='nexusTutorJourneyV1';
+  const JOURNEY_TTL_MS=12*60*60*1000;
   const STATUS_RANK={OUTSIDE:0,WAITING:1,READY:2,AT_GATE:3,COMPLETED:4};
   const els=VIEW.elements;
 
@@ -20,15 +21,27 @@
   function mergeConfig(base,stored){return{...clone(base),...stored,school:{...(base.school||{}),...(stored?.school||{})},thresholds:{...(base.thresholds||{}),...(stored?.thresholds||{})}};}
   function loadConfig(){return mergeConfig(DEFAULTS,RUNTIME.storage.read(CFG_KEY,{}));}
   function loadJourney(){return RUNTIME.storage.read(JOURNEY_KEY,{active:false,status:'OUTSIDE',startedAt:null,lastCheckedAt:null});}
-  function saveJourney(){RUNTIME.storage.write(JOURNEY_KEY,journey);}
+  function isJourneyExpired(item,now=Date.now()){
+    if(!item?.active)return false;
+    const startedAt=Date.parse(item.startedAt||'');
+    return !Number.isFinite(startedAt)||now-startedAt>=JOURNEY_TTL_MS;
+  }
 
   let config=loadConfig();
-  let journey=loadJourney();
+  const storedJourney=loadJourney();
+  const expiredJourneyAtStartup=isJourneyExpired(storedJourney)?clone(storedJourney):null;
+  let journey=expiredJourneyAtStartup?{
+    ...storedJourney,active:false,status:'OUTSIDE',startedAt:null,expiredAt:new Date().toISOString()
+  }:storedJourney;
+  if(expiredJourneyAtStartup)RUNTIME.storage.write(JOURNEY_KEY,journey);
+  const recoveredActiveAtStartup=Boolean(journey.active&&journey.status!=='COMPLETED');
+  function saveJourney(){RUNTIME.storage.write(JOURNEY_KEY,journey);}
+
   let currentPosition=LOCATION.current();
   let latestDistance=Number.isFinite(Number(journey.lastDistance))?Number(journey.lastDistance):null;
   let latestSource=journey.lastSource||'direct';
   let latestAccuracy=Number.isFinite(Number(journey.lastAccuracy))?Number(journey.lastAccuracy):null;
-  let measurementState=Number.isFinite(latestDistance)?'STALE':'UNAVAILABLE';
+  let measurementState=recoveredActiveAtStartup&&Number.isFinite(latestDistance)?'RECALCULATING':Number.isFinite(latestDistance)?'STALE':'UNAVAILABLE';
   let manualDistanceEnabled=false;
   let manualDistance=Math.max(0,Number(config.thresholds?.waitingMeters)||1000);
   let refreshTimer=null,countdownTimer=null,nextRefreshAt=null,refreshInFlight=false;
@@ -123,12 +136,21 @@
   }
   function completeJourney(){if(!journey.active||journey.status==='COMPLETED')return;const from=journey.status;journey.status='COMPLETED';journey.completedAt=new Date().toISOString();saveJourney();stopRefreshLoop();addLog('COMPLETED','Solicitud completada',latestDistance);recordTelemetry('DELIVERY_COMPLETED',{fromStatus:from});render();}
   function resetJourney(){recordTelemetry('JOURNEY_RESET');journey={active:false,status:'OUTSIDE',startedAt:null,lastCheckedAt:journey.lastCheckedAt||null,lastDistance:latestDistance,lastSource:latestSource,lastAccuracy:latestAccuracy};saveJourney();stopRefreshLoop();if((currentPosition||manualDistanceEnabled)&&schoolReady())refreshMeasurement({allowPromotion:false});else render();}
+  function expireJourneyIfNeeded(reason='ttl-check'){
+    if(!isJourneyExpired(journey))return false;
+    const previous={id:journey.id||null,status:journey.status||'OUTSIDE',startedAt:journey.startedAt||null};
+    journey={active:false,status:'OUTSIDE',startedAt:null,lastCheckedAt:journey.lastCheckedAt||null,lastDistance:latestDistance,lastSource:latestSource,lastAccuracy:latestAccuracy,expiredAt:new Date().toISOString()};
+    saveJourney();measurementRevision++;measurementState=Number.isFinite(latestDistance)?'STALE':'UNAVAILABLE';stopRefreshLoop();
+    addLog('OUTSIDE','Recorrido vencido después de 12 horas',latestDistance);
+    recordTelemetry('JOURNEY_EXPIRED',{reason,ttlHours:12,previousJourneyId:previous.id,previousStatus:previous.status,previousStartedAt:previous.startedAt});render();
+    return true;
+  }
   function startRefreshLoop(){
-    stopRefreshLoop();if(!journey.active||journey.status==='COMPLETED')return;
+    stopRefreshLoop();if(!journey.active||journey.status==='COMPLETED'||expireJourneyIfNeeded('poll-start'))return;
     const seconds=pollSecondsForStatus();if(!seconds)return;
     nextRefreshAt=Date.now()+seconds*1000;
     refreshTimer=setInterval(async()=>{
-      if(refreshInFlight)return;
+      if(expireJourneyIfNeeded('poll-tick')||refreshInFlight)return;
       refreshInFlight=true;
       try{await refreshMeasurement({allowPromotion:true,recordMeasurement:true});}
       finally{refreshInFlight=false;if(refreshTimer)nextRefreshAt=Date.now()+pollSecondsForStatus()*1000;}
@@ -144,7 +166,7 @@
   }
 
   function watchGps(){
-    if(!LOCATION.supported()){measurementState='UNAVAILABLE';VIEW.setActionHint('Este navegador no ofrece geolocalización.');recordTelemetry('GPS_NOT_AVAILABLE');return;}
+    if(!LOCATION.supported()){measurementState='UNAVAILABLE';VIEW.setActionHint('Este navegador no ofrece geolocalización.');recordTelemetry('GPS_NOT_AVAILABLE');render();return;}
     LOCATION.watch({
       onPosition:position=>{
         const recovering=measurementState==='UNAVAILABLE';currentPosition=position;
@@ -159,6 +181,7 @@
   }
   async function refreshOnReturn(){
     if(document.visibilityState==='hidden'||resumeRun||Date.now()-lastResumeAt<2000||!schoolReady())return;
+    if(expireJourneyIfNeeded('resume'))return;
     const run={journey,manual:manualDistanceEnabled};resumeRun=run;lastResumeAt=Date.now();measurementRevision++;stopRefreshLoop();recordTelemetry('APP_RESUME');
     const isCurrent=()=>resumeRun===run&&journey===run.journey&&manualDistanceEnabled===run.manual&&document.visibilityState!=='hidden';
     try{
@@ -170,7 +193,7 @@
       console.warn(error);currentPosition=null;measurementState='UNAVAILABLE';render();recordTelemetry('GPS_RESUME_ERROR',{error:String(error?.message||error)});if(journey.active)addLog(journey.status,'Medición al volver a la app no disponible',null);
     }finally{if(resumeRun===run){resumeRun=null;if(journey.active&&document.visibilityState!=='hidden'&&journey.status!=='COMPLETED')startRefreshLoop();}}
   }
-  function onVisibilityChange(){if(document.visibilityState==='hidden'){recordTelemetry('APP_HIDDEN');resumeRun=null;lastResumeAt=-Infinity;measurementRevision++;if(!manualDistanceEnabled&&Number.isFinite(latestDistance))measurementState='STALE';stopRefreshLoop();}else return refreshOnReturn();}
+  function onVisibilityChange(){if(document.visibilityState==='hidden'){recordTelemetry('APP_HIDDEN');resumeRun=null;lastResumeAt=-Infinity;measurementRevision++;if(!manualDistanceEnabled&&Number.isFinite(latestDistance))measurementState='STALE';stopRefreshLoop();render();}else return refreshOnReturn();}
   function setOnlineState(value){const next=Boolean(value);if(next===onlineState){VIEW.renderConnection(onlineState);return;}onlineState=next;recordTelemetry(next?'INTERNET_ONLINE':'INTERNET_OFFLINE');render();}
   function onConfigChanged(payload){
     config=mergeConfig(DEFAULTS,payload?.config||RUNTIME.storage.read(CFG_KEY,{}));
@@ -201,5 +224,14 @@
   RUNTIME.events.on('config:changed',onConfigChanged);
   window.NEXUS_TUTOR_COMPLETE_JOURNEY=completeJourney;
 
-  syncManualControls();renderLog();render();recordTelemetry('APP_LOADED');watchGps();installSw();if(journey.active&&document.visibilityState!=='hidden'&&journey.status!=='COMPLETED')startRefreshLoop();
+  syncManualControls();renderLog();render();
+  if(expiredJourneyAtStartup){
+    addLog('OUTSIDE','Recorrido vencido después de 12 horas',latestDistance);
+    recordTelemetry('JOURNEY_EXPIRED',{reason:'startup',ttlHours:12,previousJourneyId:expiredJourneyAtStartup.id||null,previousStatus:expiredJourneyAtStartup.status||'OUTSIDE',previousStartedAt:expiredJourneyAtStartup.startedAt||null});
+  }else if(recoveredActiveAtStartup){
+    recordTelemetry('JOURNEY_RECOVERED',{ttlHours:12,startedAt:journey.startedAt||null});
+  }else recordTelemetry('APP_LOADED');
+  watchGps();installSw();
+  if(recoveredActiveAtStartup&&document.visibilityState!=='hidden')refreshOnReturn();
+  else if(journey.active&&document.visibilityState!=='hidden'&&journey.status!=='COMPLETED')startRefreshLoop();
 })();
