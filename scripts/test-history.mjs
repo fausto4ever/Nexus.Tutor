@@ -131,14 +131,14 @@ async function testResumeAndGpsLoss(sources){
   assert(h.gpsRequests.length===1,'Visibility and focus deduplicate fresh GPS request');
   assert(h.gpsRequests[0].options.maximumAge===0,'Resume requires fresh GPS');
   assert(h.element('#distanceValue').textContent===before,'Resume preserves last known metrage');
-  assert(h.element('#distanceSource').textContent.includes('Recalculando'),'Resume visibly indicates recalculation');
+  assert(h.element('#gpsBadge').textContent.includes('Recalculando'),'Resume visibly indicates recalculation');
   assert(h.element('#pickupBtn').disabled,'Stale/recalculating measurement cannot start a new journey');
   h.gpsRequests[0].success({coords:{latitude:19,longitude:-101.005,accuracy:7}});await pending;
-  assert(h.element('#distanceSource').textContent==='Distancia directa'&&!h.element('#pickupBtn').disabled,'Fresh resume replaces stale measurement and reenables start');
+  assert(h.element('#gpsBadge').textContent.includes('GPS Activo')&&h.element('#distanceSource').textContent==='Distancia directa'&&!h.element('#pickupBtn').disabled,'Fresh resume replaces stale measurement and reenables start');
 
   await h.gpsError();
   assert(h.element('#distanceValue').textContent!=='—','watchPosition error preserves last distance');
-  assert(h.element('#distanceSource').textContent.includes('Última ubicación'),'watchPosition error labels distance as last known');
+  assert(h.element('#gpsBadge').textContent.includes('GPS Inactivo')&&h.element('#distanceSource').textContent.includes('Última ubicación'),'watchPosition error labels distance as last known');
   assert(h.element('#pickupBtn').disabled,'watchPosition error invalidates distance for new start');
 
   await h.gps(19,-101.005);
@@ -150,7 +150,7 @@ async function testResumeAndGpsLoss(sources){
   h.gpsRequests[1].error({code:1,message:'Permission denied'});await failed;
   assert(h.journey().status===attained,'Resume GPS failure preserves attained journey status');
   assert(h.element('#distanceValue').textContent===visibleBeforeFail,'Resume failure preserves last known metrage');
-  assert(h.element('#distanceSource').textContent.includes('Última ubicación'),'Resume failure marks last-known measurement');
+  assert(h.element('#gpsBadge').textContent.includes('GPS Inactivo')&&h.element('#distanceSource').textContent.includes('Última ubicación'),'Resume failure marks last-known measurement');
   return ['Initial GPS','Return dedup','Fresh GPS maximumAge','Keep metrage while recalculating','Recalculating indicator','No stale start','Fresh resume','Watch error keeps distance','Watch error label','Watch error blocks start','GPS recovery','Active status preserved on failure','Active metrage preserved','Active failure label'];
 }
 
