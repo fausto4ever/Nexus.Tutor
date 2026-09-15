@@ -18,7 +18,7 @@
   <main class="app-shell">
     <header class="topbar">
       <div class="brand-block">
-        <div class="eyebrow">CONTROL DE ACCESO · v0.1.11</div>
+        <div class="eyebrow">CONTROL DE ACCESO · v0.1.12</div>
         <h1>Nexus.Tutor</h1>
       </div>
       <div class="topbar-actions">
@@ -91,6 +91,10 @@
           <span class="muted">Estado del recorrido</span>
           <div id="statusPill" role="status" aria-live="polite" class="status-pill status-outside">UBICACIÓN PENDIENTE</div>
           <p id="statusMessage">Esperando una medición GPS válida.</p>
+          <div class="sync-row">
+            <span>Tiempo de recorrido</span>
+            <strong id="journeyElapsed">00:00</strong>
+          </div>
           <div class="sync-row">
             <span>Próxima medición</span>
             <strong id="countdown">—</strong>
