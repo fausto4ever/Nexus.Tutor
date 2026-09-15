@@ -84,7 +84,7 @@
     return{config:normalized,destinations,activeDestinationId,active};
   }
   function journeyActive(){return Boolean(readJson(JOURNEY_KEY,{})?.active);}
-  function escapeHtml(value){return String(value??'').replace(/[&<>'\"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[char]));}
+  function escapeHtml(value){return String(value??'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));}
   function renderOptions(model,selectedId=model.activeDestinationId){
     els.destinationSelect.innerHTML=model.destinations.map(item=>`<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('');
     els.destinationSelect.value=selectedId;
@@ -102,7 +102,12 @@
     els.distanceMode.value=config.distanceMode||'direct';
   }
   function setDestinationLock(locked){
-    for(const element of [els.destinationSelect,els.addDestinationBtn,els.nameInput,els.lat,els.lng,els.useCurrentBtn])element.disabled=locked;
+    const controls=[
+      els.destinationSelect,els.addDestinationBtn,els.cancelDestinationBtn,els.nameInput,
+      els.lat,els.lng,els.latMinusBtn,els.lngMinusBtn,els.useCurrentBtn,
+      els.waiting,els.ready,els.gate,els.distanceMode,els.saveSettingsBtn
+    ];
+    for(const element of controls)element.disabled=locked;
   }
   function setDraftUi(active){
     els.saveSettingsBtn.textContent=active?'Guardar nuevo destino':'Guardar cambios';
