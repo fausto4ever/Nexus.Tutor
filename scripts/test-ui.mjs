@@ -28,8 +28,8 @@ ok(['<option value="day">1 día</option>','<option value="week">1 semana</option
 ok(html.includes('Generar QR temporal · próximamente')&&html.includes('disabled>Generar QR temporal'),'QR temporal permanece deshabilitado');
 ok(ui.includes("const THEME_KEY='nexusTutorThemeV1'")&&ui.includes("prefers-color-scheme: dark")&&ui.includes('localStorage.setItem(THEME_KEY,next)'),'Tema persistente y preferencia del sistema');
 ok(ui.includes("const TAB_KEY='nexusTutorTabV1'")&&ui.includes('localStorage.setItem(TAB_KEY,next)'),'Pestaña activa persistente');
-ok(css.includes('max-width:480px')&&css.includes('width:92px')&&css.includes("'Plus Jakarta Sans'"),'Diseño móvil compacto respeta referencia');
-ok(css.includes('html[data-theme="dark"]')&&css.includes('.bottom-nav')&&css.includes('.future-card'),'Estilos dark y navegación definidos');
+ok(/max-width\s*:\s*480px/.test(css)&&/width\s*:\s*92px/.test(css)&&css.includes("'Plus Jakarta Sans'"),'Diseño móvil compacto respeta referencia');
+ok(/html\[data-theme=(?:"dark"|dark)\]/.test(css)&&css.includes('.bottom-nav')&&css.includes('.future-card'),'Estilos dark y navegación definidos');
 ok(sw.includes("'./css/nexus-tutor.css'")&&sw.includes("'./features/destinations.js'")&&sw.includes("'./features/journey.js'")&&sw.includes("nexus-tutor-0.1.9"),'Service worker incluye CSS único y features modulares');
 ok(JSON.parse(pkg).version==='0.1.9','Package version 0.1.9');
 ok(!html.includes('TUTOR-AUTH-ID-')&&!html.includes('TEMP-PASS:'),'Sin QR ficticios incrustados');
