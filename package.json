@@ -3,7 +3,7 @@
   "version": "0.1.9",
   "private": true,
   "scripts": {
-    "test": "node scripts/test-startup.mjs && node scripts/test-history.mjs && node scripts/test-destinations.mjs && node scripts/test-ui.mjs && node scripts/test-css.mjs",
+    "test": "node scripts/test-startup.mjs && node scripts/test-history.mjs && node scripts/test-destinations.mjs && node scripts/test-ui.mjs && node scripts/test-css.mjs && node scripts/print-clean-css.mjs",
     "build": "node scripts/build.mjs"
   },
   "dependencies": {
