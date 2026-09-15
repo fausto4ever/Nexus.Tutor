@@ -46,7 +46,7 @@ for(const src of scriptOrder){
   const source=await fs.readFile(new URL(src,root),'utf8');
   try{new vm.Script(source,{filename:src}).runInContext(context);}catch(error){throw new Error(`ARRANQUE_FALLÓ en ${src}: ${error.stack||error}`);}
 }
-assert(context.NEXUS_TUTOR_DEFAULTS?.version==='0.1.9','config.js no inicializó la versión');
+assert(context.NEXUS_TUTOR_DEFAULTS?.version==='0.1.10','config.js no inicializó la versión');
 assert(context.NEXUS_TUTOR_RUNTIME,'runtime compartido no inicializó');
 assert(context.NEXUS_TUTOR_LOCATION,'servicio de ubicación no inicializó');
 assert(context.NEXUS_TUTOR_DISTANCE,'servicio de distancia no inicializó');
