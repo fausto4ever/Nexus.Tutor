@@ -39,22 +39,6 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Apply shell CSS cleanup once
-        if: github.event_name == 'pull_request' && github.head_ref == 'refactor/0.1.9-structure'
-        run: |
-          git fetch origin "${{ github.head_ref }}"
-          git checkout -B "${{ github.head_ref }}" "origin/${{ github.head_ref }}"
-          node scripts/cleanup-css-shell-once.mjs
-          if git diff --quiet -- css/nexus-tutor.css; then
-            echo 'Shell CSS ya limpio'
-          else
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add css/nexus-tutor.css
-            git commit -m 'style: retirar important innecesarios del shell'
-            git push origin "HEAD:${{ github.head_ref }}"
-          fi
-
       - name: Test
         run: npm test
 
@@ -80,6 +64,8 @@ jobs:
           ! test -f dist/config.js
           ! test -f dist/foundation.min.css
           ! test -f dist/application.min.css
+          ! test -f dist/styles.min.css
+          ! test -f dist/ui.min.css
           grep -q 'config.min.js' dist/index.html
           grep -q 'runtime.min.js' dist/index.html
           grep -q 'location.min.js' dist/index.html
