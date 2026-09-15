@@ -15,7 +15,7 @@
     schoolName:$('#schoolName'),schoolLock:$('#schoolLock'),schoolCoords:$('#schoolCoords'),connectionBadge:$('#connectionBadge'),distanceValue:$('#distanceValue'),distanceUnit:$('#distanceUnit'),accuracyValue:$('#accuracyValue'),distanceSource:$('#distanceSource'),distanceProgress:$('#distanceProgress'),waitingMarker:$('#waitingMarker'),readyMarker:$('#readyMarker'),gateMarker:$('#gateMarker'),waitingLabel:$('#waitingLabel'),readyLabel:$('#readyLabel'),gateLabel:$('#gateLabel'),statusPill:$('#statusPill'),statusMessage:$('#statusMessage'),countdown:$('#countdown'),lastUpdate:$('#lastUpdate'),pickupBtn:$('#pickupBtn'),pickupBtnText:$('#pickupBtnText'),actionHint:$('#actionHint'),resetJourneyBtn:$('#resetJourneyBtn'),eventLog:$('#eventLog'),clearLogBtn:$('#clearLogBtn'),downloadTelemetryBtn:$('#downloadTelemetryBtn'),manualDistanceToggle:$('#manualDistanceToggle'),manualDistanceControls:$('#manualDistanceControls'),manualDistanceInput:$('#manualDistanceInput'),manualDistanceMinus:$('#manualDistanceMinus'),manualDistancePlus:$('#manualDistancePlus'),manualDistanceStep:$('#manualDistanceStep')
   };
 
-  function escapeHtml(value){return String(value??'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));}
+  function escapeHtml(value){return String(value??'').replace(/[&<>'\"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));}
   function formatDistance(value){
     if(!Number.isFinite(Number(value)))return'—';
     const meters=Number(value);
@@ -59,6 +59,22 @@
   function setCountdown(value){elements.countdown.textContent=value;}
   function setActionHint(value){elements.actionHint.textContent=value;}
 
+  function renderLocationState({measurementState,manualDistanceEnabled,latestDistance,latestSource}){
+    if(measurementState==='RECALCULATING'){
+      elements.distanceSource.textContent='↻ Recalculando · última ubicación';
+      elements.distanceSource.dataset.state='recalculating';
+      return;
+    }
+    if(manualDistanceEnabled||measurementState==='FRESH'){
+      const source=latestSource==='manual'?'manual':latestSource==='driving'?'ruta en auto':latestSource==='direct-fallback'?'directa · ruta no disponible':'distancia directa';
+      elements.distanceSource.textContent=`● Activo · ${source}`;
+      elements.distanceSource.dataset.state='active';
+      return;
+    }
+    elements.distanceSource.textContent=Number.isFinite(latestDistance)?'○ Inactivo · última ubicación':'○ Inactivo';
+    elements.distanceSource.dataset.state='inactive';
+  }
+
   function render(model){
     const {config,journey,currentPosition,latestDistance,latestSource,latestAccuracy,measurementState,manualDistanceEnabled,manualDistance,onlineState,schoolReady,rawStatus,canStart}=model;
     const thresholds=config.thresholds;
@@ -89,10 +105,7 @@
     else if(Number.isFinite(latestAccuracy))elements.accuracyValue.textContent=`±${Math.round(latestAccuracy)} m${measurementState==='FRESH'?'':' · última'}`;
     else elements.accuracyValue.textContent='—';
 
-    if(measurementState==='RECALCULATING')elements.distanceSource.textContent='↻ Recalculando ubicación…';
-    else if(measurementState==='UNAVAILABLE'&&Number.isFinite(latestDistance))elements.distanceSource.textContent='⚠ Última ubicación conocida';
-    else if(measurementState==='STALE'&&Number.isFinite(latestDistance))elements.distanceSource.textContent='Última ubicación conocida';
-    else elements.distanceSource.textContent=latestSource==='manual'?'Distancia manual':latestSource==='driving'?'Ruta en auto':latestSource==='direct-fallback'?'Ruta no disponible · directa':'Distancia directa';
+    renderLocationState({measurementState,manualDistanceEnabled,latestDistance,latestSource});
 
     elements.manualDistanceToggle.checked=manualDistanceEnabled;
     elements.manualDistanceControls.classList.toggle('hidden',!manualDistanceEnabled);
