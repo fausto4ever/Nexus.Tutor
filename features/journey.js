@@ -14,6 +14,7 @@
 
   const CFG_KEY='nexusTutorConfigV1',JOURNEY_KEY='nexusTutorJourneyV1';
   const JOURNEY_TTL_MS=12*60*60*1000;
+  const DELIVERY_WAIT_MS=3*60*1000;
   const STATUS_RANK={OUTSIDE:0,WAITING:1,READY:2,AT_GATE:3,COMPLETED:4};
   const els=VIEW.elements;
 
@@ -34,6 +35,10 @@
     ...storedJourney,active:false,status:'OUTSIDE',startedAt:null,expiredAt:new Date().toISOString()
   }:storedJourney;
   if(expiredJourneyAtStartup)RUNTIME.storage.write(JOURNEY_KEY,journey);
+  if(!expiredJourneyAtStartup&&journey.active&&journey.status==='AT_GATE'&&!Number.isFinite(Date.parse(journey.atGateAt||''))){
+    journey.atGateAt=new Date().toISOString();
+    RUNTIME.storage.write(JOURNEY_KEY,journey);
+  }
   const recoveredActiveAtStartup=Boolean(journey.active&&journey.status!=='COMPLETED');
   function saveJourney(){RUNTIME.storage.write(JOURNEY_KEY,journey);}
 
@@ -99,11 +104,24 @@
   function measureDistance(){
     return DISTANCE.measure({position:currentPosition,school:config.school,mode:config.distanceMode,manualEnabled:manualDistanceEnabled,manualMeters:manualDistance,routeTimeoutMs:8000});
   }
+  function ensureAtGateTimestamp(){
+    if(!journey.active||journey.status!=='AT_GATE')return false;
+    if(Number.isFinite(Date.parse(journey.atGateAt||'')))return true;
+    journey.atGateAt=new Date().toISOString();saveJourney();return true;
+  }
+  function deliveryRemainingMs(now=Date.now()){
+    if(!journey.active||journey.status!=='AT_GATE')return null;
+    ensureAtGateTimestamp();
+    const atGateAt=Date.parse(journey.atGateAt||'');
+    return Number.isFinite(atGateAt)?Math.max(0,DELIVERY_WAIT_MS-(now-atGateAt)):DELIVERY_WAIT_MS;
+  }
   function promoteStatus(candidate,distance){
     if(!journey.active||journey.status==='COMPLETED')return;
     const current=journey.status||'OUTSIDE';
     if((STATUS_RANK[candidate]||0)>(STATUS_RANK[current]||0)){
-      journey.status=candidate;saveJourney();addLog(candidate,manualDistanceEnabled?'Avance por simulación manual':'Avance automático',distance);recordTelemetry('STATUS_CHANGED',{fromStatus:current,toStatus:candidate,distanceMeters:distance});
+      journey.status=candidate;
+      if(candidate==='AT_GATE'&&!Number.isFinite(Date.parse(journey.atGateAt||'')))journey.atGateAt=new Date().toISOString();
+      saveJourney();addLog(candidate,manualDistanceEnabled?'Avance por simulación manual':'Avance automático',distance);recordTelemetry('STATUS_CHANGED',{fromStatus:current,toStatus:candidate,distanceMeters:distance});
       if(document.visibilityState!=='hidden')startRefreshLoop();
     }
   }
@@ -130,11 +148,24 @@
 
   function startJourney(){
     if(els.pickupBtn.disabled||journey.active)return;
-    const initialStatus=candidateStatus(latestDistance);
-    journey={active:true,id:`journey-${Date.now()}`,status:initialStatus,startedAt:new Date().toISOString(),lastCheckedAt:journey.lastCheckedAt||null,lastDistance:latestDistance,lastSource:latestSource,lastAccuracy:latestAccuracy};saveJourney();
+    const initialStatus=candidateStatus(latestDistance),startedAt=new Date().toISOString();
+    journey={active:true,id:`journey-${Date.now()}`,status:initialStatus,startedAt,atGateAt:initialStatus==='AT_GATE'?startedAt:null,lastCheckedAt:journey.lastCheckedAt||null,lastDistance:latestDistance,lastSource:latestSource,lastAccuracy:latestAccuracy};saveJourney();
     addLog(initialStatus,initialStatus==='OUTSIDE'?'Trayecto iniciado · lejos del destino':manualDistanceEnabled?'Inicio de prueba manual':'Inicio de prueba',latestDistance);recordTelemetry('JOURNEY_STARTED',{distanceMeters:latestDistance});refreshMeasurement({allowPromotion:true});startRefreshLoop();render();
   }
-  function completeJourney(){if(!journey.active||journey.status==='COMPLETED')return;const from=journey.status;journey.status='COMPLETED';journey.completedAt=new Date().toISOString();saveJourney();stopRefreshLoop();addLog('COMPLETED','Solicitud completada',latestDistance);recordTelemetry('DELIVERY_COMPLETED',{fromStatus:from});render();}
+  function completeJourney(options={}){
+    if(!journey.active||journey.status==='COMPLETED')return;
+    const automatic=Boolean(options?.automatic),from=journey.status;
+    journey.status='COMPLETED';journey.completedAt=new Date().toISOString();journey.completedAutomatically=automatic;saveJourney();stopRefreshLoop();
+    addLog('COMPLETED',automatic?'Solicitud completada automáticamente después de 3 min en puerta':'Solicitud completada',latestDistance);
+    recordTelemetry('DELIVERY_COMPLETED',{fromStatus:from,automatic,waitSeconds:automatic?DELIVERY_WAIT_MS/1000:null,atGateAt:journey.atGateAt||null});render();
+  }
+  function completeDeliveryIfDue(reason='delivery-timeout'){
+    if(!journey.active||journey.status!=='AT_GATE')return false;
+    const remaining=deliveryRemainingMs();
+    if(remaining===null||remaining>0)return false;
+    recordTelemetry('DELIVERY_WAIT_ELAPSED',{reason,waitSeconds:DELIVERY_WAIT_MS/1000,atGateAt:journey.atGateAt||null});
+    completeJourney({automatic:true});return true;
+  }
   function resetJourney(){recordTelemetry('JOURNEY_RESET');journey={active:false,status:'OUTSIDE',startedAt:null,lastCheckedAt:journey.lastCheckedAt||null,lastDistance:latestDistance,lastSource:latestSource,lastAccuracy:latestAccuracy};saveJourney();stopRefreshLoop();if((currentPosition||manualDistanceEnabled)&&schoolReady())refreshMeasurement({allowPromotion:false});else render();}
   function expireJourneyIfNeeded(reason='ttl-check'){
     if(!isJourneyExpired(journey))return false;
@@ -146,11 +177,11 @@
     return true;
   }
   function startRefreshLoop(){
-    stopRefreshLoop();if(!journey.active||journey.status==='COMPLETED'||expireJourneyIfNeeded('poll-start'))return;
+    stopRefreshLoop();if(!journey.active||journey.status==='COMPLETED'||expireJourneyIfNeeded('poll-start')||completeDeliveryIfDue('poll-start'))return;
     const seconds=pollSecondsForStatus();if(!seconds)return;
     nextRefreshAt=Date.now()+seconds*1000;
     refreshTimer=setInterval(async()=>{
-      if(expireJourneyIfNeeded('poll-tick')||refreshInFlight)return;
+      if(expireJourneyIfNeeded('poll-tick')||completeDeliveryIfDue('poll-tick')||refreshInFlight)return;
       refreshInFlight=true;
       try{await refreshMeasurement({allowPromotion:true,recordMeasurement:true});}
       finally{refreshInFlight=false;if(refreshTimer)nextRefreshAt=Date.now()+pollSecondsForStatus()*1000;}
@@ -158,7 +189,10 @@
     countdownTimer=setInterval(updateCountdown,1000);recordTelemetry('POLL_RATE_CHANGED',{pollIntervalSeconds:seconds});updateCountdown();
   }
   function stopRefreshLoop(){clearInterval(refreshTimer);clearInterval(countdownTimer);refreshTimer=countdownTimer=null;nextRefreshAt=null;VIEW.setCountdown('—');}
-  function updateCountdown(){VIEW.setCountdown(nextRefreshAt?`${Math.max(0,Math.ceil((nextRefreshAt-Date.now())/1000))} s`:'—');}
+  function updateCountdown(){
+    if(completeDeliveryIfDue('delivery-countdown'))return;
+    VIEW.setCountdown(nextRefreshAt?`${Math.max(0,Math.ceil((nextRefreshAt-Date.now())/1000))} s`:'—');
+  }
   function setManualDistanceEnabled(enabled){
     measurementRevision++;manualDistanceEnabled=Boolean(enabled);
     if(manualDistanceEnabled){syncManualControls();latestDistance=manualDistance;latestSource='manual';latestAccuracy=null;measurementState='FRESH';journey.lastCheckedAt=new Date().toISOString();journey.lastDistance=latestDistance;journey.lastSource=latestSource;journey.lastAccuracy=null;saveJourney();if(journey.active)promoteStatus(candidateStatus(latestDistance),latestDistance);recordTelemetry('MANUAL_MODE_ON');render();}
@@ -181,7 +215,7 @@
   }
   async function refreshOnReturn(){
     if(document.visibilityState==='hidden'||resumeRun||Date.now()-lastResumeAt<2000||!schoolReady())return;
-    if(expireJourneyIfNeeded('resume'))return;
+    if(expireJourneyIfNeeded('resume')||completeDeliveryIfDue('resume'))return;
     const run={journey,manual:manualDistanceEnabled};resumeRun=run;lastResumeAt=Date.now();measurementRevision++;stopRefreshLoop();recordTelemetry('APP_RESUME');
     const isCurrent=()=>resumeRun===run&&journey===run.journey&&manualDistanceEnabled===run.manual&&document.visibilityState!=='hidden';
     try{
@@ -230,8 +264,9 @@
     recordTelemetry('JOURNEY_EXPIRED',{reason:'startup',ttlHours:12,previousJourneyId:expiredJourneyAtStartup.id||null,previousStatus:expiredJourneyAtStartup.status||'OUTSIDE',previousStartedAt:expiredJourneyAtStartup.startedAt||null});
   }else if(recoveredActiveAtStartup){
     recordTelemetry('JOURNEY_RECOVERED',{ttlHours:12,startedAt:journey.startedAt||null});
+    completeDeliveryIfDue('startup');
   }else recordTelemetry('APP_LOADED');
   watchGps();installSw();
-  if(recoveredActiveAtStartup&&document.visibilityState!=='hidden')refreshOnReturn();
+  if(journey.active&&journey.status!=='COMPLETED'&&recoveredActiveAtStartup&&document.visibilityState!=='hidden')refreshOnReturn();
   else if(journey.active&&document.visibilityState!=='hidden'&&journey.status!=='COMPLETED')startRefreshLoop();
 })();
