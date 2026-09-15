@@ -1,4 +1,4 @@
-const CACHE='nexus-tutor-0.1.10';
+const CACHE='nexus-tutor-0.1.11';
 const ASSETS=['./','./index.html','./css/nexus-tutor.css','./config.js','./core/runtime.js','./services/location.js','./services/distance.js','./services/telemetry.js','./features/destinations.js','./ui/journey-view.js','./features/journey.js','./ui/shell.js','./manifest.webmanifest','./icon.svg'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
