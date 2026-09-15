@@ -46,7 +46,7 @@ for(const src of scriptOrder){
   const source=await fs.readFile(new URL(src,root),'utf8');
   try{new vm.Script(source,{filename:src}).runInContext(context);}catch(error){throw new Error(`ARRANQUE_FALLÓ en ${src}: ${error.stack||error}`);}
 }
-assert(context.NEXUS_TUTOR_DEFAULTS?.version==='0.1.11','config.js no inicializó la versión');
+assert(context.NEXUS_TUTOR_DEFAULTS?.version==='0.1.12','config.js no inicializó la versión');
 assert(context.NEXUS_TUTOR_RUNTIME,'runtime compartido no inicializó');
 assert(context.NEXUS_TUTOR_LOCATION,'servicio de ubicación no inicializó');
 assert(context.NEXUS_TUTOR_DISTANCE,'servicio de distancia no inicializó');
@@ -56,6 +56,7 @@ assert(context.NEXUS_TUTOR_JOURNEY_VIEW,'vista del recorrido no inicializó');
 assert(context.NEXUS_TUTOR_UI,'shell UI no inicializó');
 assert(typeof context.NEXUS_TUTOR_COMPLETE_JOURNEY==='function','controlador del recorrido no inicializó');
 assert(typeof watchSuccess==='function'&&typeof watchError==='function','journey.js no registró watchPosition');
+assert(elements.get('journeyElapsed')?.textContent==='00:00','Contador visible de recorrido inicializado');
 assert(elements.get('pickupBtn')?.listeners?.click?.length===1,'Botón Voy por mi hijo no quedó enlazado exactamente una vez');
 assert(elements.get('saveSettingsBtn')?.listeners?.click?.length===1&&!elements.get('saveSettingsBtn').listeners.click[0].capture,'Guardar cambios debe tener exactamente un propietario sin capture');
 assert(elements.get('settingsBtn')?.listeners?.click?.length===1,'Configuración debe tener exactamente un propietario');
