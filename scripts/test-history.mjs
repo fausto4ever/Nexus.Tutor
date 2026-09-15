@@ -12,8 +12,14 @@ function createHarness(source, stored = new Map()) {
   const defaults = {version:'0.1.8',school:{name:'Escuela',lat:19,lng:-101},thresholds:{waitingMeters:1000,readyMeters:100,atGateMeters:20},distanceMode:'direct',refreshSeconds:30};
   class TestDate extends Date {constructor(...args){super(...(args.length?args:[1700000000000+clock]));}static now(){return 1700000000000+clock;}}
   const localStorage = {getItem:k=>stored.get(k)||null,setItem:(k,v)=>stored.set(k,v)};
-  const navigator = {onLine:true,geolocation:{watchPosition(success,error){gpsSuccessCallback=success;gpsErrorCallback=error;},getCurrentPosition(success,error,options){gpsRequests.push({success,error,options});}}};
-  const win={NEXUS_TUTOR_DEFAULTS:defaults,addEventListener:(name,fn)=>{windowListeners[name]=fn;}};
+  const navigator = {onLine:true,geolocation:{watchPosition(success,error){gpsSuccessCallback=success;gpsErrorCallback=error;return 1;},clearWatch(){},getCurrentPosition(success,error,options){gpsRequests.push({success,error,options});}}};
+  const runtime={dom:{one:selector=>element(selector),require:()=>true}};
+  const location={
+    supported:()=>Boolean(navigator.geolocation),
+    watch({onPosition,onError,options}={}){return navigator.geolocation.watchPosition(onPosition,onError,options);},
+    fresh(options={}){return new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:true,maximumAge:0,timeout:15000,...options}));}
+  };
+  const win={NEXUS_TUTOR_DEFAULTS:defaults,NEXUS_TUTOR_RUNTIME:runtime,NEXUS_TUTOR_LOCATION:location,addEventListener:(name,fn)=>{windowListeners[name]=fn;}};
   new Function('window','document','navigator','localStorage','setInterval','clearInterval','Date','console','fetch',source)(
     win,document,navigator,localStorage,
     (fn,ms)=>{timers.set(++id,{fn,ms,next:clock+ms});return id;},key=>timers.delete(key),TestDate,{warn(){}},async()=>{throw Error('Route unavailable');}
