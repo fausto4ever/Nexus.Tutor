@@ -93,11 +93,11 @@ const recovered=createHarness(sources,{hoursAgo:2});
 assert(recovered.journey().active===true,'Un recorrido activo menor a 12 horas debe recuperarse automáticamente');
 assert(recovered.journey().status==='WAITING','La recuperación debe conservar el estado alcanzado');
 assert(recovered.element('#distanceValue').textContent!=='—','La última distancia debe permanecer visible al recuperar');
-assert(recovered.element('#accuracyValue').textContent.includes('Recalculando'),'La interfaz debe indicar Recalculando mientras conserva la lectura anterior');
+assert(recovered.element('#gpsBadge').textContent.includes('Recalculando'),'La interfaz debe indicar Recalculando mientras conserva la lectura anterior');
 assert(recovered.gpsRequests.length===1&&recovered.gpsRequests[0].options.maximumAge===0,'La recuperación debe pedir una lectura GPS fresca inmediatamente');
 await recovered.resolveFresh();
 assert(recovered.journey().active===true,'Una nueva lectura no debe cancelar el recorrido recuperado');
-assert(recovered.element('#accuracyValue').textContent.includes('Activo'),'La lectura fresca debe cambiar el indicador a Activo');
+assert(recovered.element('#gpsBadge').textContent.includes('GPS Activo'),'La lectura fresca debe cambiar el indicador a Activo');
 assert(recovered.telemetry().some(item=>item.event==='JOURNEY_RECOVERED'),'La recuperación debe quedar registrada en telemetría local');
 
 const expired=createHarness(sources,{hoursAgo:13});
@@ -105,7 +105,7 @@ assert(expired.journey().active===false,'Un recorrido de más de 12 horas debe c
 assert(expired.journey().status==='OUTSIDE','Un recorrido vencido debe volver a estado inactivo');
 assert(expired.gpsRequests.length===0,'Un recorrido vencido no debe iniciar una recuperación GPS automática');
 assert(expired.element('#distanceValue').textContent!=='—','La última lectura puede permanecer visible aunque el recorrido haya vencido');
-assert(expired.element('#accuracyValue').textContent.includes('Inactivo'),'La lectura conservada de un recorrido vencido debe marcarse Inactivo');
+assert(expired.element('#gpsBadge').textContent.includes('GPS Inactivo'),'La lectura conservada de un recorrido vencido debe marcarse Inactivo');
 assert(expired.telemetry().some(item=>item.event==='JOURNEY_EXPIRED'&&item.ttlHours===12),'La caducidad de 12 horas debe quedar registrada');
 
 console.log('Recuperabilidad: recorrido activo, vigencia 12h y estados GPS verificados.');
