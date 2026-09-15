@@ -2,10 +2,12 @@
   'use strict';
   const RUNTIME=window.NEXUS_TUTOR_RUNTIME;
   const LOCATION=window.NEXUS_TUTOR_LOCATION;
+  const TELEMETRY=window.NEXUS_TUTOR_TELEMETRY;
   if(!RUNTIME)throw new Error('RUNTIME_NOT_LOADED');
   if(!LOCATION)throw new Error('LOCATION_SERVICE_NOT_LOADED');
+  if(!TELEMETRY)throw new Error('TELEMETRY_SERVICE_NOT_LOADED');
 
-  const CFG_KEY='nexusTutorConfigV1',JOURNEY_KEY='nexusTutorJourneyV1',TELEMETRY_KEY='nexusTutorTelemetryV1';
+  const CFG_KEY='nexusTutorConfigV1',JOURNEY_KEY='nexusTutorJourneyV1';
   const defaults=window.NEXUS_TUTOR_DEFAULTS||{};
   const $=selector=>RUNTIME.dom.one(selector);
   RUNTIME.dom.require([
@@ -56,8 +58,7 @@
   }
   function recoverDestinationFromTelemetry(destination){
     if(hasValidCoordinates(destination))return destination;
-    const telemetry=readJson(TELEMETRY_KEY,[]);
-    const match=telemetry.find(item=>item?.destinationId===destination?.id&&Number.isFinite(Number(item?.destinationLatitude))&&Number.isFinite(Number(item?.destinationLongitude)));
+    const match=TELEMETRY.loadTelemetry().find(item=>item?.destinationId===destination?.id&&Number.isFinite(Number(item?.destinationLatitude))&&Number.isFinite(Number(item?.destinationLongitude)));
     if(!match)return destination;
     return{...destination,lat:Number(match.destinationLatitude),lng:Number(match.destinationLongitude),name:destination.name||match.destinationName||'Destino'};
   }
@@ -117,9 +118,8 @@
   function showError(message){els.settingsError.textContent=message;els.settingsError.classList.remove('hidden');}
   function clearError(){els.settingsError.textContent='';els.settingsError.classList.add('hidden');}
   function appendTelemetry(event,extra={}){
-    const items=readJson(TELEMETRY_KEY,[]),journey=readJson(JOURNEY_KEY,{}),model=getModel();
-    items.unshift({at:new Date().toISOString(),journeyId:journey.id||null,event,journeyStatus:journey.status||'OUTSIDE',measurementState:'UNKNOWN',destinationId:model.activeDestinationId,destinationName:model.active.name||null,online:navigator.onLine!==false,visibility:document.visibilityState||'visible',...extra});
-    RUNTIME.storage.write(TELEMETRY_KEY,items.slice(0,1000));
+    const journey=readJson(JOURNEY_KEY,{}),model=getModel();
+    TELEMETRY.record(event,{journeyId:journey.id||null,journeyStatus:journey.status||'OUTSIDE',measurementState:'UNKNOWN',destinationId:model.activeDestinationId,destinationName:model.active.name||null,online:navigator.onLine!==false,visibility:document.visibilityState||'visible',...extra});
   }
   function emitConfig(config,reason){RUNTIME.events.emit('config:changed',{config,reason});}
 
