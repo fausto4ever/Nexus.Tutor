@@ -11,7 +11,10 @@ const JS_ASSETS=[
   ['config.js','config.min.js'],
   ['core/runtime.js','runtime.min.js'],
   ['services/location.js','location.min.js'],
+  ['services/distance.js','distance.min.js'],
+  ['services/telemetry.js','telemetry.min.js'],
   ['features/destinations.js','destinations.min.js'],
+  ['ui/journey-view.js','journey-view.min.js'],
   ['features/journey.js','journey.min.js'],
   ['ui/shell.js','shell.min.js']
 ];
