@@ -2,12 +2,14 @@
   'use strict';
   const THEME_KEY='nexusTutorThemeV1';
   const TAB_KEY='nexusTutorTabV1';
+  const JOURNEY_KEY='nexusTutorJourneyV1';
   const root=document.documentElement;
   const themeBtn=document.querySelector('#themeToggleBtn');
   const themeIcon=document.querySelector('#themeIcon');
   const themeMeta=document.querySelector('meta[name="theme-color"]');
   const navButtons=[...document.querySelectorAll('.nav-btn')];
   const tabPanels=[...document.querySelectorAll('.tab-content')];
+  let screenWakeLock=null,wakeLockRequestInFlight=false;
 
   function systemTheme(){
     try{return window.matchMedia?.('(prefers-color-scheme: dark)').matches?'dark':'light';}catch{return'light';}
@@ -46,6 +48,36 @@
     if(persist)localStorage.setItem(TAB_KEY,next);
   }
 
+  function activeJourney(){
+    try{
+      const journey=JSON.parse(localStorage.getItem(JOURNEY_KEY)||'null');
+      return Boolean(journey?.active&&journey?.status!=='COMPLETED');
+    }catch{return false;}
+  }
+  async function requestScreenWakeLock(){
+    if(!activeJourney()||document.visibilityState==='hidden'||screenWakeLock||wakeLockRequestInFlight||!navigator.wakeLock?.request)return;
+    wakeLockRequestInFlight=true;
+    try{
+      const lock=await navigator.wakeLock.request('screen');
+      screenWakeLock=lock;
+      lock.addEventListener?.('release',()=>{if(screenWakeLock===lock)screenWakeLock=null;});
+    }catch(error){
+      console.warn('SCREEN_WAKE_LOCK_NOT_AVAILABLE',error);
+    }finally{
+      wakeLockRequestInFlight=false;
+    }
+  }
+  async function releaseScreenWakeLock(){
+    const lock=screenWakeLock;
+    screenWakeLock=null;
+    if(!lock)return;
+    try{await lock.release();}catch{}
+  }
+  function syncScreenWakeLock(){
+    if(activeJourney()&&document.visibilityState!=='hidden')requestScreenWakeLock();
+    else releaseScreenWakeLock();
+  }
+
   applyTheme(storedTheme()||systemTheme(),{persist:false});
   const savedTab=localStorage.getItem(TAB_KEY);
   activateTab(savedTab&&availableTab(savedTab)?savedTab:'tab-tracking',{persist:false});
@@ -58,5 +90,9 @@
     });
   }catch{}
 
-  window.NEXUS_TUTOR_UI={applyTheme,activateTab};
+  document.addEventListener('visibilitychange',syncScreenWakeLock);
+  setInterval(syncScreenWakeLock,1000);
+  syncScreenWakeLock();
+
+  window.NEXUS_TUTOR_UI={applyTheme,activateTab,syncScreenWakeLock};
 })();
