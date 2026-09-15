@@ -9,7 +9,7 @@ function createHarness(sources, stored = new Map()) {
     return elements.get(selector);
   };
   const document={visibilityState:'visible',activeElement:null,querySelector:selector=>element(selector),addEventListener:(name,fn)=>{documentListeners[name]=fn;},body:{appendChild(){}},createElement:()=>({click(){},remove(){}})};
-  const defaults = {version:'0.1.9',school:{name:'Escuela',lat:19,lng:-101},thresholds:{waitingMeters:1000,readyMeters:100,atGateMeters:20},distanceMode:'direct',refreshSeconds:30};
+  const defaults = {version:'0.1.12',school:{name:'Escuela',lat:19,lng:-101},thresholds:{waitingMeters:1000,readyMeters:100,atGateMeters:20},distanceMode:'direct',refreshSeconds:30};
   class TestDate extends Date {constructor(...args){super(...(args.length?args:[1700000000000+clock]));}static now(){return 1700000000000+clock;}}
   const localStorage = {getItem:k=>stored.get(k)||null,setItem:(k,v)=>stored.set(k,v),removeItem:k=>stored.delete(k)};
   const navigator = {onLine:true,geolocation:{watchPosition(success,error){gpsSuccessCallback=success;gpsErrorCallback=error;return 1;},clearWatch(){},getCurrentPosition(success,error,options){gpsRequests.push({success,error,options});}},serviceWorker:{register:async()=>({})}};
@@ -71,13 +71,15 @@ async function testHistory(sources){
   await h.advance(10000);assert(h.logs()[0].status==='READY'&&h.logs()[0].distance===50,'READY periodic record');
   h.element('#manualDistanceInput').value='10';await h.event('#manualDistanceInput','change');
   assert(h.journey().status==='AT_GATE','AT_GATE promotes immediately');
+  assert(Number.isFinite(h.journey().travelDurationMs),'AT_GATE freezes travel duration');
   assert(h.measurementTimerMs()===10000,'AT_GATE does not increase polling beyond READY');
   await h.advance(10000);assert(h.logs()[0].status==='AT_GATE','AT_GATE keeps periodic telemetry/history');
   const reloaded=createHarness(sources,h.stored);assert(reloaded.journey().status==='AT_GATE','Log/journey persist on reload');
   assert(reloaded.element('#distanceValue').textContent!=='—','Last known distance restores on reload');
+  assert(reloaded.element('#journeyElapsed').textContent===h.element('#journeyElapsed').textContent,'Frozen travel duration restores on reload');
   const before=h.logs().length;await h.pendingReset();assert(!h.journey().active,'Reset ends journey');
   await h.advance(60000);assert(h.logs().length===before,'Reset stops timer logging');
-  return ['Start log','WAITING cadence','WAITING periodic','Manual source','Immediate READY','READY 10s cadence','READY record','Immediate AT_GATE','AT_GATE cadence cap','AT_GATE record','Reload status','Reload last distance','Reset inactive','Reset stops logging'];
+  return ['Start log','WAITING cadence','WAITING periodic','Manual source','Immediate READY','READY 10s cadence','READY record','Immediate AT_GATE','AT_GATE duration frozen','AT_GATE cadence cap','AT_GATE record','Reload status','Reload last distance','Reload duration','Reset inactive','Reset stops logging'];
 }
 
 async function testLinearProgress(sources){
@@ -116,10 +118,10 @@ async function testEarlyActivationAndPolling(sources){
   h.element('#manualDistanceInput').value='75000';await h.event('#manualDistanceInput','change');
   assert(h.journey().status==='AT_GATE','Distance increase never regresses attained state');
   h.win.NEXUS_TUTOR_COMPLETE_JOURNEY();await Promise.resolve();
-  assert(h.journey().status==='COMPLETED'&&h.element('#pickupBtnText').textContent==='SOLICITUD COMPLETADA'&&h.element('#statusMessage').textContent.includes('Solicitud completada')&&h.element('#statusMessage').textContent.includes('excelente día')&&h.element('#statusMessage').textContent.includes('Que les vaya muy bien'),'Completion shows final request status and greeting');
+  assert(h.journey().status==='COMPLETED'&&h.element('#pickupBtnText').textContent==='SOLICITUD COMPLETADA'&&h.element('#statusMessage').textContent.includes('Solicitud completada')&&h.element('#statusMessage').textContent.includes('Llegaste en')&&h.element('#statusMessage').textContent.includes('excelente día'),'Completion shows final request status, travel time and greeting');
   assert(h.logs()[0].status==='COMPLETED'&&h.logs()[0].message==='Solicitud completada','Completion is recorded as request completed');
   assert(h.measurementTimerMs()===null,'Completion stops proximity polling');
-  return ['Fresh required','50km activation','OUTSIDE state','OUTSIDE cadence','WAITING cadence','READY cadence','AT_GATE cadence cap','Waiting delivery UI','Monotonic after gate','Completed greeting','Completion stops polling'];
+  return ['Fresh required','50km activation','OUTSIDE state','OUTSIDE cadence','WAITING cadence','READY cadence','AT_GATE cadence cap','Waiting delivery UI','Monotonic after gate','Completed travel greeting','Completion stops polling'];
 }
 
 async function testResumeAndGpsLoss(sources){
@@ -159,6 +161,7 @@ async function testConnectivityAndTelemetry(sources){
   assert(h.element('#connectionBadge').textContent.includes('En línea'),'Starts with online indicator');
   h.offline();assert(h.element('#connectionBadge').textContent.includes('Sin internet'),'Offline event updates indicator');
   h.online();assert(h.element('#connectionBadge').textContent.includes('En línea'),'Online event restores indicator');
+  await h.gps(19,-101.005,7);
   await h.event('#manualDistanceToggle','change',{target:{checked:true}});
   await h.event('#pickupBtn','click');
   h.element('#manualDistanceInput').value='100';await h.event('#manualDistanceInput','change');
@@ -168,8 +171,9 @@ async function testConnectivityAndTelemetry(sources){
   assert(events.some(e=>e.event==='JOURNEY_STARTED'),'Journey start is in telemetry');
   assert(events.some(e=>e.event==='STATUS_CHANGED'&&e.toStatus==='READY'),'Status transitions are in telemetry');
   assert(events.every(e=>Object.hasOwn(e,'online')&&Object.hasOwn(e,'measurementState')),'Telemetry contains connectivity and measurement freshness');
+  assert(events.every(e=>!Object.hasOwn(e,'latitude')&&!Object.hasOwn(e,'longitude')),'Telemetry does not persist tutor route coordinates');
   assert(typeof h.element('#downloadTelemetryBtn').listeners.click==='function','JSON telemetry download control is wired');
-  return ['Online indicator','Offline indicator','Online recovery','Telemetry stored','Connectivity telemetry','Journey telemetry','Status telemetry','Telemetry fields','Download JSON control'];
+  return ['Online indicator','Offline indicator','Online recovery','Telemetry stored','Connectivity telemetry','Journey telemetry','Status telemetry','Telemetry fields','No route coordinates','Download JSON control'];
 }
 
 const [distance,telemetry,view,journey]=await Promise.all([
