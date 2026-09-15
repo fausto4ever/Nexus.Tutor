@@ -84,7 +84,7 @@
     return{config:normalized,destinations,activeDestinationId,active};
   }
   function journeyActive(){return Boolean(readJson(JOURNEY_KEY,{})?.active);}
-  function escapeHtml(value){return String(value??'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));}
+  function escapeHtml(value){return String(value??'').replace(/[&<>'\"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[char]));}
   function renderOptions(model,selectedId=model.activeDestinationId){
     els.destinationSelect.innerHTML=model.destinations.map(item=>`<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('');
     els.destinationSelect.value=selectedId;
@@ -132,10 +132,18 @@
   function onDestinationChange(){
     if(journeyActive())return;
     const model=getModel(),destination=model.destinations.find(item=>item.id===els.destinationSelect.value);
+    if(!destination)return;
+    const previousId=model.activeDestinationId,previousName=model.active.name;
     draftId=null;
+    const next={...model.config,activeDestinationId:destination.id,school:{name:destination.name,lat:destination.lat,lng:destination.lng}};
+    writeConfig(next);
     fillDestination(destination);
     setDraftUi(false);
     clearError();
+    if(previousId!==destination.id){
+      appendTelemetry('DESTINATION_CHANGED',{fromDestinationId:previousId,fromDestinationName:previousName,toDestinationId:destination.id,toDestinationName:destination.name,destinationLatitude:destination.lat,destinationLongitude:destination.lng});
+      emitConfig(next,'destination-selected');
+    }
   }
   function addDestination(){
     if(journeyActive()){showError('Reinicia o completa el trayecto antes de cambiar de destino.');return;}
