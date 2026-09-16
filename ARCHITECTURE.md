@@ -116,13 +116,84 @@ Reglas de estado:
 - el estado sólo puede avanzar;
 - una distancia mayor nunca degrada un estado ya alcanzado;
 - `COMPLETED` es terminal;
-- GPS sólo puede avanzar hasta `AT_GATE`;
-- `COMPLETED` queda reservado para confirmación futura de Nexus.Access/Gateway;
-- el recorrido puede iniciar desde cualquier distancia con una medición utilizable y fresca.
+- GPS puede avanzar hasta `AT_GATE`;
+- el recorrido puede iniciar desde cualquier distancia con una medición utilizable y fresca;
+- mientras no exista confirmación real desde Nexus.Access/Gateway, la implementación de laboratorio completa automáticamente después de 3 minutos en `AT_GATE`;
+- cuando Nexus.Access/Gateway quede integrado, la confirmación real de entrega sustituirá ese cierre temporal.
 
 El estado inicial de un recorrido respeta directamente la medición fresca existente (`OUTSIDE`, `WAITING`, `READY` o `AT_GATE`).
 
 El polling evita mediciones periódicas simultáneas y OSRM tiene timeout con fallback a Haversine.
+
+## Principio funcional de entrega y `AT_GATE`
+
+La prioridad de Nexus.Tutor no es el trayecto en automóvil. La prioridad es que el tutor se presente en la escuela, solicite al alumno y se complete la entrega de forma controlada.
+
+Por lo tanto, `AT_GATE` se define como un **evento de presencia en el punto de control de recogida**. No significa exclusivamente “el GPS reportó 20 metros”. El GPS es sólo una de varias maneras de confirmar esa presencia.
+
+### Regla principal
+
+`AT_GATE → solicitud de entrega → cola de Nexus.Access → entrega → COMPLETED`
+
+La solicitud de entrega debe nacer o reafirmarse cuando existe un evento `AT_GATE` válido.
+
+### Fuentes de `AT_GATE`
+
+Se contemplan las siguientes fuentes:
+
+- `GPS`: Nexus.Tutor detecta que el tutor llegó al rango configurado. Es una ayuda opcional; el sistema no debe depender de que el tutor tenga GPS disponible o suficientemente preciso.
+- `TUTOR_QR`: el QR permanente de “Mi QR” se escanea en un punto de control configurado para recogida.
+- `ACCESS_MANUAL`: un operador de Nexus.Access confirma manualmente que el tutor está presente y solicita al alumno.
+- `TEMPORARY_QR`: un tercero autorizado presenta un QR temporal vigente para recoger al alumno.
+
+El origen deberá conservarse en la solicitud para diagnóstico y auditoría funcional, por ejemplo `GPS`, `TUTOR_QR`, `ACCESS_MANUAL` o `TEMPORARY_QR`.
+
+### Comportamiento de “Mi QR”
+
+“Mi QR” es la credencial permanente del tutor.
+
+Cuando se escanea en un punto de control de recogida:
+
+- si no existe una solicitud activa para esa entrega, el escaneo confirma `AT_GATE` y crea la solicitud de entrega;
+- si el tutor ya venía con un recorrido activo o ya existe una solicitud, el escaneo **reafirma `AT_GATE`** y no debe crear una solicitud duplicada;
+- el escaneo prevalece como confirmación presencial aunque el vehículo continúe moviéndose o la lectura GPS no sea suficientemente precisa.
+
+Esto permite que el tutor use GPS durante el trayecto si lo desea, pero garantiza que pueda completar el flujo únicamente presentándose en el punto de control.
+
+### Nexus.Access como término medio
+
+Si el tutor no usa GPS y tampoco presenta un QR, el operador puede crear o confirmar manualmente la solicitud desde Nexus.Access.
+
+Esta captura manual representa la misma realidad funcional: **el tutor ya está presente en el punto de control**. Por lo tanto, debe producir el mismo resultado lógico que las demás fuentes de `AT_GATE`.
+
+### Solicitudes anticipadas — mejora futura
+
+Nexus.Tutor podrá permitir avisos anticipados como:
+
+- “Hoy voy por mi hijo a las 14:30”.
+- “Esta semana voy por mi hijo a las 14:30”.
+- posteriormente, reglas recurrentes como determinados días de la semana.
+
+Una solicitud anticipada **no equivale a `AT_GATE`** y no debe sacar al alumno por sí sola. Sirve para avisar o preparar la operación. La presencia real seguirá confirmándose mediante GPS, QR, QR temporal o captura manual en Nexus.Access.
+
+Si la hora solicitada corresponde a una salida anticipada respecto de la política del alumno, una evolución futura podrá enviarla a autorización de dirección antes de habilitar la entrega.
+
+### Estado de implementación
+
+Este apartado define el principio funcional objetivo.
+
+En la versión de laboratorio actual:
+
+- `AT_GATE` por GPS ya existe;
+- el cierre temporal de 3 minutos después de `AT_GATE` ya existe;
+- `TUTOR_QR`, `ACCESS_MANUAL`, `TEMPORARY_QR` y la creación real de solicitudes en Nexus.Access/Gateway todavía deben implementarse;
+- las solicitudes anticipadas y la autorización de salida temprana quedan como mejoras futuras.
+
+### Principio de diseño
+
+El sistema no debe convertir el GPS en requisito de entrega.
+
+**GPS ayuda al trayecto; el punto de control confirma la presencia; `AT_GATE` desencadena la solicitud de entrega.**
 
 ### `ui/shell.js`
 
