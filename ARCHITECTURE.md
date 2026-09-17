@@ -1,210 +1,229 @@
-# Nexus.Tutor 0.1.9 — arquitectura de trabajo
+# Nexus.Tutor — arquitectura y flujo maestro
 
 ## Objetivo
 
-Mantener el comportamiento funcional validado de Nexus.Tutor mientras reducimos deuda técnica y dejamos límites claros entre almacenamiento, geolocalización, cálculo de distancia, telemetría, destinos, recorrido y presentación.
+Mantener el comportamiento funcional validado de Nexus.Tutor mientras reducimos deuda técnica y dejamos límites claros entre almacenamiento, geolocalización, cálculo de distancia, telemetría, destinos, recorrido, presentación y solicitudes de recogida.
+
+## Contexto multi-repositorio
+
+El sistema se desarrolla en repositorios separados. Cada chat de trabajo debe concentrarse en un solo repositorio/proceso y no modificar otro repositorio salvo instrucción explícita.
+
+- **Nexus.Tutor**: aplicación del tutor. Rama de trabajo actual: `refactor/0.1.9-structure`.
+- **Nexus.Access**: aplicación del operador escolar. La integración con Gateway se trabaja en su rama `gateway-integration`.
+- **Nexus.Display**: pantalla operativa/cola visible. Se trata como repositorio independiente de Access.
+- **Gateway**: frontera de servicios compartidos entre clientes y backend. Se trata como repositorio independiente y sus cambios no deben confundirse con Access, Tutor o Display.
+
+### Regla de trabajo
+
+Antes de cualquier escritura confirmar mentalmente: **repositorio → rama → alcance**. `main` no es rama de trabajo de Nexus.Tutor. No mergear, revertir ni publicar en `main` sin autorización explícita del usuario. El trabajo de Tutor continúa únicamente en `refactor/0.1.9-structure` hasta nueva instrucción.
+
+Después de cada publicación de Tutor se debe reportar: **repositorio → rama → versión → commit → URL de Cloudflare/Workers usada para probar esa rama**. No inferir ni inventar URLs de deployment.
 
 ## Capas actuales
 
 ### `config.js`
 
-Define los valores por defecto de Nexus.Tutor y conserva la migración inicial de configuraciones/destinos guardados.
+Define valores por defecto y conserva la migración inicial de configuraciones/destinos guardados.
 
 ### `core/runtime.js`
 
-Infraestructura compartida:
-
-- acceso seguro a `localStorage`;
-- bus de eventos interno;
-- utilidades DOM;
-- aislamiento de fallos de listeners para que un consumidor no interrumpa a los demás.
+Infraestructura compartida: acceso seguro a `localStorage`, bus de eventos, utilidades DOM y aislamiento de fallos de listeners.
 
 ### `services/location.js`
 
-Única frontera con `navigator.geolocation`.
-
-Responsabilidades:
-
-- `watchPosition`;
-- lectura fresca con `getCurrentPosition`;
-- detener el watch;
-- conservar la última posición aceptada.
-
-Ningún otro módulo debe monkey-patchear `navigator.geolocation` ni simular eventos de foco.
+Única frontera con `navigator.geolocation`: `watchPosition`, lectura fresca, detener watch y conservar última posición aceptada.
 
 ### `services/distance.js`
 
-Único propietario del cálculo físico de distancia.
-
-Responsabilidades:
-
-- validación de coordenadas del destino;
-- Haversine para distancia directa;
-- consulta OSRM para ruta en auto;
-- timeout de OSRM;
-- fallback automático a Haversine;
-- modo manual para laboratorio.
-
-`features/journey.js` no contiene Haversine ni conoce la URL de OSRM.
+Único propietario del cálculo físico de distancia: validación de coordenadas, Haversine, OSRM para laboratorio, timeout, fallback a Haversine y modo manual.
 
 ### `services/telemetry.js`
 
-Propietario del almacenamiento de historial y telemetría.
-
-Responsabilidades:
-
-- historial local del recorrido;
-- telemetría local;
-- límites de retención;
-- exportación JSON.
-
-`features/journey.js` y `features/destinations.js` producen eventos, pero no administran directamente las claves de historial/telemetría.
+Propietario del historial y telemetría locales, retención y exportación JSON.
 
 ### `features/destinations.js`
 
-Único propietario de:
-
-- diálogo de configuración;
-- destinos guardados;
-- destino activo;
-- coordenadas;
-- umbrales;
-- método de distancia;
-- selección inmediata de destino;
-- publicación de `config:changed`.
-
-Durante un recorrido activo, los controles editables del diálogo quedan bloqueados. El diálogo puede abrirse para consultar la configuración, pero no modificarla.
+Propietario de configuración, destinos, coordenadas, umbrales, método de distancia y publicación de `config:changed`.
 
 ### `ui/journey-view.js`
 
-Propietario de la presentación del recorrido.
-
-Responsabilidades:
-
-- referencias DOM de la pantalla Recorrido;
-- distancia, precisión y fuente;
-- barra de progreso y marcadores;
-- estado y mensajes visibles;
-- botón principal y reinicio;
-- simulador visual;
-- historial visible;
-- indicador de conectividad;
-- cuenta regresiva.
-
-La vista recibe estado ya calculado y no decide transiciones de negocio.
+Propietario de la presentación del recorrido. La vista recibe estado calculado y no decide transiciones de negocio.
 
 ### `features/journey.js`
 
-Queda como coordinador del caso de uso del recorrido.
+Coordinador del recorrido: máquina de estados, inicio/reinicio/finalización, promoción monotónica, polling, GPS, simulación y coordinación entre servicios.
 
-Responsabilidades:
-
-- máquina de estados;
-- inicio, reinicio y finalización;
-- promoción monotónica de estado;
-- polling;
-- ciclo de GPS y reanudación;
-- simulación manual como fuente de medición;
-- coordinación entre `location`, `distance`, `telemetry` y `journey-view`;
-- reacción a `config:changed`;
-- hook futuro `window.NEXUS_TUTOR_COMPLETE_JOURNEY`.
-
-Reglas de estado:
+La máquina histórica del recorrido es:
 
 `OUTSIDE → WAITING → READY → AT_GATE → COMPLETED`
 
-- el estado sólo puede avanzar;
-- una distancia mayor nunca degrada un estado ya alcanzado;
-- `COMPLETED` es terminal;
-- GPS puede avanzar hasta `AT_GATE`;
-- el recorrido puede iniciar desde cualquier distancia con una medición utilizable y fresca;
-- mientras no exista confirmación real desde Nexus.Access/Gateway, la implementación de laboratorio completa automáticamente después de 3 minutos en `AT_GATE`;
-- cuando Nexus.Access/Gateway quede integrado, la confirmación real de entrega sustituirá ese cierre temporal.
+El estado sólo avanza; una distancia mayor no degrada un estado alcanzado y `COMPLETED` es terminal.
 
-El estado inicial de un recorrido respeta directamente la medición fresca existente (`OUTSIDE`, `WAITING`, `READY` o `AT_GATE`).
+### `features/lab-pickup-modes.js`
 
-El polling evita mediciones periódicas simultáneas y OSRM tiene timeout con fallback a Haversine.
+Laboratorio de los tres modos de solicitud de recogida. En la versión actual la frontera con Gateway es un **placeholder**: permite probar la UI y conservar solicitudes locales, pero todavía no realiza POST reales.
 
-## Principio funcional de entrega y `AT_GATE`
+## Flujo maestro de solicitud de recogida
 
-La prioridad de Nexus.Tutor no es el trayecto en automóvil. La prioridad es que el tutor se presente en la escuela, solicite al alumno y se complete la entrega de forma controlada.
+### Regla común
 
-Por lo tanto, `AT_GATE` se define como un **evento de presencia en el punto de control de recogida**. No significa exclusivamente “el GPS reportó 20 metros”. El GPS es sólo una de varias maneras de confirmar esa presencia.
+Los tres modos comienzan igual:
 
-### Regla principal
+`VOY POR MI HIJO → crear solicitud → REQUESTED`
 
-`AT_GATE → solicitud de entrega → cola de Nexus.Access → entrega → COMPLETED`
+`REQUESTED` significa que el colegio sabe que el tutor irá por el alumno. No significa que esté cerca ni que haya llegado.
 
-La solicitud de entrega debe nacer o reafirmarse cuando existe un evento `AT_GATE` válido.
+La solicitud remota confirmada no debe depender de que Tutor continúe conectado. Una vez que Gateway confirme `REQUESTED`, perder Internet, GPS, cerrar la PWA o quedarse sin batería no debe borrar ni retroceder la solicitud.
 
-### Fuentes de `AT_GATE`
+### Modo 1 — Sin ubicación
 
-Se contemplan las siguientes fuentes:
+Alumno de laboratorio: `1001`.
 
-- `GPS`: Nexus.Tutor detecta que el tutor llegó al rango configurado. Es una ayuda opcional; el sistema no debe depender de que el tutor tenga GPS disponible o suficientemente preciso.
-- `TUTOR_QR`: el QR permanente de “Mi QR” se escanea en un punto de control configurado para recogida.
-- `ACCESS_MANUAL`: un operador de Nexus.Access confirma manualmente que el tutor está presente y solicita al alumno.
-- `TEMPORARY_QR`: un tercero autorizado presenta un QR temporal vigente para recoger al alumno.
+`REQUESTED → permanece REQUESTED`
 
-El origen deberá conservarse en la solicitud para diagnóstico y auditoría funcional, por ejemplo `GPS`, `TUTOR_QR`, `ACCESS_MANUAL` o `TEMPORARY_QR`.
+Tutor no comparte GPS. La solicitud sí debe existir y ser visible para los operadores: saben que irá por el alumno, aunque no saben cuándo llegará. No se inventa por ahora una transición automática a WAITING/READY/AT_GATE.
 
-### Comportamiento de “Mi QR”
+### Modo 2 — GPS solo para ETA
 
-“Mi QR” es la credencial permanente del tutor.
+Alumno de laboratorio: `1002`.
 
-Cuando se escanea en un punto de control de recogida:
+Al iniciar se toma una lectura de ubicación y se calcula un ETA inicial. Después no se requiere compartir la posición durante todo el trayecto.
 
-- si no existe una solicitud activa para esa entrega, el escaneo confirma `AT_GATE` y crea la solicitud de entrega;
-- si el tutor ya venía con un recorrido activo o ya existe una solicitud, el escaneo **reafirma `AT_GATE`** y no debe crear una solicitud duplicada;
-- el escaneo prevalece como confirmación presencial aunque el vehículo continúe moviéndose o la lectura GPS no sea suficientemente precisa.
+Flujo:
 
-Esto permite que el tutor use GPS durante el trayecto si lo desea, pero garantiza que pueda completar el flujo únicamente presentándose en el punto de control.
+`REQUESTED → WAITING → READY`
 
-### Nexus.Access como término medio
+Las promociones se estiman por el ETA inicial y el tiempo transcurrido. El laboratorio usa una velocidad media inicial de referencia de **20 km/h** cuando simula ETA mediante distancia/Haversine.
 
-Si el tutor no usa GPS y tampoco presenta un QR, el operador puede crear o confirmar manualmente la solicitud desde Nexus.Access.
+Con WAITING equivalente aproximadamente a los últimos 1000 m, a 20 km/h representa aproximadamente **3 minutos**. READY representa llegada inminente. Ejemplo conceptual para ETA inicial de 20 minutos:
 
-Esta captura manual representa la misma realidad funcional: **el tutor ya está presente en el punto de control**. Por lo tanto, debe producir el mismo resultado lógico que las demás fuentes de `AT_GATE`.
+- T=00: `REQUESTED`, ETA 20 min.
+- Aproximadamente cuando resten 3 min: `WAITING`.
+- En la ventana final de llegada estimada: `READY`.
+- Al llegar ETA a cero **no se promueve automáticamente a `AT_GATE`**.
 
-### Solicitudes anticipadas — mejora futura
+La razón es que una lectura tomada al inicio no demuestra presencia real: el tutor pudo detenerse o cambiar su recorrido.
 
-Nexus.Tutor podrá permitir avisos anticipados como:
+### Modo 3 — GPS durante todo el recorrido / GPS ALL
 
-- “Hoy voy por mi hijo a las 14:30”.
-- “Esta semana voy por mi hijo a las 14:30”.
-- posteriormente, reglas recurrentes como determinados días de la semana.
+Alumno de laboratorio: `1003`.
 
-Una solicitud anticipada **no equivale a `AT_GATE`** y no debe sacar al alumno por sí sola. Sirve para avisar o preparar la operación. La presencia real seguirá confirmándose mediante GPS, QR, QR temporal o captura manual en Nexus.Access.
+Flujo objetivo:
 
-Si la hora solicitada corresponde a una salida anticipada respecto de la política del alumno, una evolución futura podrá enviarla a autorización de dirección antes de habilitar la entrega.
+`REQUESTED → WAITING → READY → AT_GATE`
 
-### Estado de implementación
+Mientras está fuera de los umbrales, el recorrido y las mediciones pueden mantenerse localmente. Las fronteras de laboratorio actuales son:
 
-Este apartado define el principio funcional objetivo.
+- `WAITING`: 1000 m.
+- `READY`: 100 m.
+- `AT_GATE`: 20 m.
 
-En la versión de laboratorio actual:
+Aquí `AT_GATE` sí puede alcanzarse por evidencia GPS continua al cruzar la geobarda correspondiente.
 
-- `AT_GATE` por GPS ya existe;
-- el cierre temporal de 3 minutos después de `AT_GATE` ya existe;
-- `TUTOR_QR`, `ACCESS_MANUAL`, `TEMPORARY_QR` y la creación real de solicitudes en Nexus.Access/Gateway todavía deben implementarse;
-- las solicitudes anticipadas y la autorización de salida temprana quedan como mejoras futuras.
+## Semántica operativa de estados
 
-### Principio de diseño
+- **REQUESTED**: sabemos que el tutor viene.
+- **WAITING**: está próximo o, en modo ETA, se estima que está próximo.
+- **READY**: llegada inminente; puede ser estimada en modo ETA.
+- **AT_GATE**: existe evidencia de presencia/llegada, no sólo una predicción temporal.
+- **COMPLETED**: entrega completada.
+- **CANCELLED**: solicitud cancelada explícitamente.
+- **EXPIRED**: solicitud caducada por proceso de limpieza cuando corresponda.
 
-El sistema no debe convertir el GPS en requisito de entrega.
+## Cancelar solicitud
 
-**GPS ayuda al trayecto; el punto de control confirma la presencia; `AT_GATE` desencadena la solicitud de entrega.**
+Los tres modos deben ofrecer **Cancelar solicitud** mientras la solicitud permanezca activa.
 
-### `ui/shell.js`
+Flujo objetivo:
 
-Propietario de:
+`REQUESTED/WAITING/READY/AT_GATE → CANCELLED`
 
-- navegación entre las cuatro pestañas;
-- tema claro/oscuro;
-- persistencia de pestaña y tema;
-- seguimiento de `prefers-color-scheme` mientras el usuario no haya elegido un tema manualmente.
+Cancelar una solicitud **no genera un evento de SALIDA**.
 
-## Orden de arranque
+Si Tutor solicita cancelar pero Access ya completó la entrega, `COMPLETED` prevalece y la cancelación debe rechazarse/ignorarse como transición inválida. Tutor actualiza entonces al estado autoritativo recibido.
+
+Si no hay conexión al pulsar cancelar, Tutor no debe afirmar que Gateway ya la canceló. Puede conservar una intención de cancelación pendiente y sincronizarla cuando recupere comunicación.
+
+## Resiliencia y sincronización
+
+Principios acordados:
+
+- Silencio o pérdida de comunicación **no significa cancelación**.
+- Nunca retroceder el último estado confirmado por Gateway por falta de GPS/Internet.
+- Tutor debe conservar localmente el `requestId` cuando Gateway lo proporcione.
+- Al recuperar conexión debe continuar sobre la solicitud existente, no crear otra por defecto.
+- Si el POST inicial llegó al Gateway pero Tutor perdió la respuesta, una futura protección de duplicados debe permitir recuperar/reconocer la solicitud activa existente.
+- La regla de impedir solicitudes activas duplicadas queda pendiente de implementación durante esta etapa de laboratorio; para probar los tres modos se utilizan los alumnos 1001, 1002 y 1003.
+
+## Relación con Nexus.Access y Gateway
+
+### Cierre desde Access
+
+Flujo objetivo acordado:
+
+`Access solicita cerrar request → Gateway confirma → Access genera captura manual/SALIDA → syncRecords → sincronización eventual de la solicitud`
+
+El primer actor que complete/cierre la solicitud gana. Si después llega otro registro cercano, no debe inventarse una segunda solicitud. Los movimientos de asistencia/salida siguen siendo registros auditables y no se pretende eliminar toda duplicidad de movimientos extendiendo artificialmente la ventana de duplicados a 24 horas.
+
+### Offline de Access
+
+Access puede registrar una salida estando offline. La solicitud remota podría seguir abierta hasta que llegue la sincronización. Otro operador podría haberla marcado entregada antes. Cuando `syncRecords` llegue posteriormente, el sistema debe poder reconocer la realidad ya completada en vez de cancelar o recrear innecesariamente la solicitud.
+
+### Caducidad
+
+Se contempla una función de Gateway que, al ejecutarse, tome solicitudes abiertas de fechas anteriores a hoy y las marque `EXPIRED`, sin requerir IDs individuales. Puede ser invocada como mantenimiento oportunista/asíncrono desde otro flujo del Gateway, siempre evitando convertir una llamada crítica en un proceso lento.
+
+## Regla futura de solicitud activa
+
+Objetivo: no permitir dos solicitudes activas simultáneas para el mismo alumno. Si ya existe una, Tutor debería recibir una respuesta del tipo “Juan ya tiene una solicitud de recogida” y reutilizar/mostrar la existente.
+
+Una solicitud completada no impide crear una nueva el mismo día si el alumno volvió a entrar o continúa actividades extracurriculares y posteriormente requiere otra recogida.
+
+Esta validación está **pendiente** y no bloquea el laboratorio actual.
+
+## Presencia y otras fuentes de AT_GATE
+
+`AT_GATE` debe conservar una semántica fuerte de presencia. Además de GPS ALL, el diseño futuro contempla:
+
+- `TUTOR_QR`: QR permanente del tutor escaneado en un punto de control.
+- `ACCESS_MANUAL`: operador confirma presencia.
+- `TEMPORARY_QR`: tercero autorizado presenta QR temporal.
+
+Si ya existe una solicitud activa, estas fuentes deben reafirmar la llegada y no crear una solicitud duplicada.
+
+El sistema no debe convertir GPS en requisito de entrega.
+
+## Mejoras de Nexus.Tutor registradas
+
+### Datos de la escuela
+
+Tutor tendrá un apartado con datos de contacto de la escuela. Si ya existe una solicitud activa, la interfaz podrá indicar al tutor que el alumno ya tiene solicitud de recogida y ofrecer los datos del colegio para comunicarse si necesita resolver una excepción.
+
+### Aviso de cierre de ventana de recogida
+
+Cuando la ventana de recogida esté próxima a cerrar, Tutor podrá avisar al tutor o tutores correspondientes.
+
+### Solicitud por WhatsApp — futura
+
+Se contempla que Tutor permita iniciar la solicitud mediante WhatsApp vinculado al colegio. Access tendría registrado el teléfono del tutor para identificarlo; el bot podría indicar el colegio, consultar/confirmar hijo(s) asociados y crear la solicitud correspondiente. Queda como mejora futura, no como dependencia del flujo actual.
+
+## Estado actual del laboratorio
+
+La UI dispone de tres pruebas independientes:
+
+- `1001` — Sin ubicación.
+- `1002` — GPS solo ETA.
+- `1003` — GPS ALL.
+
+Cada una crea localmente una solicitud `REQUESTED` y ofrece cancelación. La llamada real al Gateway todavía está vacía mediante funciones placeholder. El objetivo inmediato es validar primero interfaz y dinámica antes de conectar el contrato real del Gateway.
+
+Versión de Tutor al documentar este flujo: **0.1.13**.
+
+## CSS
+
+La base visual única está en `css/nexus-tutor.css`. No deben reaparecer hojas legacy ni sobrescrituras paralelas. Se mantienen tema claro/oscuro, `:focus-visible`, `prefers-reduced-motion`, `100dvh` y navegación inferior.
+
+## Orden de arranque base
 
 1. `config.js`
 2. `core/runtime.js`
@@ -216,56 +235,12 @@ Propietario de:
 8. `features/journey.js`
 9. `ui/shell.js`
 
-## CSS
-
-La cascada histórica fue retirada y se reconstruyó una única base visual en:
-
-`css/nexus-tutor.css`
-
-Reglas actuales:
-
-- un solo stylesheet fuente;
-- sin `!important`;
-- sin `transition: all`;
-- variables para tema claro/oscuro;
-- `color-scheme` para controles nativos;
-- `:focus-visible`;
-- `prefers-reduced-motion`;
-- soporte `100dvh` con fallback;
-- navegación inferior, tarjetas, recorrido, historial, pantallas futuras y diálogo de configuración definidos en la misma hoja;
-- los marcadores WAITING/READY/AT_GATE usan anclajes CSS para no desbordarse en los extremos.
-
-No deben reaparecer `foundation.css`, `application.css`, `styles.css` ni `ui.css`.
-
-## Build
-
-`scripts/build.mjs` compila:
-
-- `config.js → config.min.js`
-- `core/runtime.js → runtime.min.js`
-- `services/location.js → location.min.js`
-- `services/distance.js → distance.min.js`
-- `services/telemetry.js → telemetry.min.js`
-- `features/destinations.js → destinations.min.js`
-- `ui/journey-view.js → journey-view.min.js`
-- `features/journey.js → journey.min.js`
-- `ui/shell.js → shell.min.js`
-- `css/nexus-tutor.css → nexus-tutor.min.css`
-
-El build de producción no genera sourcemaps.
-
-## Pruebas
-
-- `test-startup.mjs`: orden real de los nueve scripts y propietarios únicos de acciones principales.
-- `test-history.mjs`: ejecuta los módulos reales de distancia, telemetría, vista y recorrido para validar estados, polling, GPS, historial y telemetría.
-- `test-destinations.mjs`: destinos, configuración, selección inmediata, telemetría compartida y bloqueo durante recorrido.
-- `test-ui.mjs`: estructura de cuatro pestañas, tema, stylesheet único y fronteras de responsabilidad del recorrido.
-- `test-css.mjs`: exige un único CSS fuente, 0 `!important`, ausencia de CSS legacy, foco visible y reduced motion.
+El laboratorio de solicitudes (`features/lab-pickup-modes.js`) debe cargarse explícitamente desde la página mientras forme parte de esta etapa de pruebas.
 
 ## Política de rama
 
-El trabajo continúa en la rama existente `refactor/0.1.9-structure`.
+El trabajo de Nexus.Tutor continúa en `refactor/0.1.9-structure`.
 
-No crear ramas nuevas salvo instrucción explícita del usuario.
+No crear ramas nuevas salvo instrucción explícita.
 
-No mergear ni publicar en `main` sin autorización explícita.
+**No mergear, revertir, publicar ni escribir en `main` sin autorización explícita.**
