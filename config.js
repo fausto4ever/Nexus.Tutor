@@ -1,5 +1,5 @@
 window.APP_INSTANCE={GATEWAY_URL:'https://control-acceso-gateway.shindarked.workers.dev'};
-window.NEXUS_TUTOR_DEFAULTS={version:'0.1.17',gatewayBaseUrl:window.APP_INSTANCE.GATEWAY_URL,school:{name:'Instituto Ausbel',lat:null,lng:null},thresholds:{waitingMeters:1000,readyMeters:100,atGateMeters:20},distanceMode:'direct',refreshSeconds:30};
+window.NEXUS_TUTOR_DEFAULTS={version:'0.1.181',gatewayBaseUrl:window.APP_INSTANCE.GATEWAY_URL,school:{name:'Instituto Ausbel',lat:null,lng:null},thresholds:{waitingMeters:1000,readyMeters:100,atGateMeters:20},distanceMode:'direct',refreshSeconds:30};
 
 (()=>{
   'use strict';
