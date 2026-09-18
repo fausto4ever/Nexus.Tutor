@@ -1,4 +1,4 @@
-window.NEXUS_TUTOR_DEFAULTS={version:'0.1.14',gatewayBaseUrl:'https://control-acceso-gateway.shindarked.workers.dev',school:{name:'Instituto Ausbel',lat:null,lng:null},thresholds:{waitingMeters:1000,readyMeters:100,atGateMeters:20},distanceMode:'direct',refreshSeconds:30};
+window.NEXUS_TUTOR_DEFAULTS={version:'0.1.15',gatewayBaseUrl:'https://control-acceso-gateway.shindarked.workers.dev',school:{name:'Instituto Ausbel',lat:null,lng:null},thresholds:{waitingMeters:1000,readyMeters:100,atGateMeters:20},distanceMode:'direct',refreshSeconds:30};
 
 (()=>{
   'use strict';
