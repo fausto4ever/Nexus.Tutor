@@ -6,8 +6,7 @@
   const nativeFetch=window.fetch.bind(window);
 
   const GET_ROUTES={
-    health:'/api/version',
-    tutorMe:'/api/tutor/me'
+    health:'/api/version'
   };
 
   function endpoint(path){
@@ -42,5 +41,11 @@
     return parseResponse(await nativeFetch(endpoint('/bootstrap'),{cache:'no-store',headers:{Accept:'application/json'}}));
   }
 
-  window.GatewayClient=Object.freeze({baseUrl,get,bootstrap});
+  async function tutor(tutorId){
+    const id=String(tutorId||'').trim();
+    if(!id)throw new Error('tutorId requerido.');
+    return parseResponse(await nativeFetch(endpoint(`/api/tutors/${encodeURIComponent(id)}`),{cache:'no-store',headers:{Accept:'application/json'}}));
+  }
+
+  window.GatewayClient=Object.freeze({baseUrl,get,bootstrap,tutor});
 })();
