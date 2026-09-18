@@ -1,6 +1,6 @@
 (()=>{
 'use strict';
-const LAB_TUTORS={scheduled:'TUT0001',eta:'TUT0002',gps:'TUT0003'};
+const LAB_TUTORS={scheduled:'TUT0001',eta:'TUT0002',gps:'TUT0004'};
 const DB_NAME='nexus-tutor',DB_VERSION=1,STORE='context';
 const client=()=>{if(!window.GatewayClient)throw new Error('GatewayClient no disponible.');return window.GatewayClient;};
 const openDb=()=>new Promise((resolve,reject)=>{if(!('indexedDB'in window)){resolve(null);return;}const request=indexedDB.open(DB_NAME,DB_VERSION);request.onupgradeneeded=()=>{const db=request.result;if(!db.objectStoreNames.contains(STORE))db.createObjectStore(STORE);};request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
