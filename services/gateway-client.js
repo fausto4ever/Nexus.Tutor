@@ -22,6 +22,7 @@
       err.id=data?.id||'';
       err.expectedRevision=data?.expectedRevision;
       err.currentRevision=data?.currentRevision;
+      err.data=data;
       throw err;
     }
     return data;
@@ -35,6 +36,15 @@
     return parseResponse(await nativeFetch(url,{cache:'no-store'}));
   }
 
+  async function post(path,body){
+    return parseResponse(await nativeFetch(endpoint(path),{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify(body||{}),
+      cache:'no-store'
+    }));
+  }
+
   async function bootstrap(){
     return parseResponse(await nativeFetch(endpoint('/bootstrap'),{cache:'no-store'}));
   }
@@ -45,5 +55,15 @@
     return parseResponse(await nativeFetch(endpoint(`/api/tutors/${encodeURIComponent(id)}`),{cache:'no-store'}));
   }
 
-  window.GatewayClient=Object.freeze({baseUrl,get,bootstrap,tutor});
+  async function createPickupRequest(payload){
+    return post('/api/pickup-requests',payload);
+  }
+
+  async function cancelPickupRequest(requestId){
+    const id=String(requestId||'').trim();
+    if(!id)throw new Error('requestId requerido.');
+    return post(`/api/pickup-requests/${encodeURIComponent(id)}/cancel`,{});
+  }
+
+  window.GatewayClient=Object.freeze({baseUrl,get,bootstrap,tutor,createPickupRequest,cancelPickupRequest});
 })();
