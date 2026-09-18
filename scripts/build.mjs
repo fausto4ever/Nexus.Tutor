@@ -13,6 +13,7 @@ const JS_ASSETS=[
   ['services/location.js','location.min.js'],
   ['services/distance.js','distance.min.js'],
   ['services/telemetry.js','telemetry.min.js'],
+  ['services/gateway-client.js','gateway-client.min.js'],
   ['services/tutor-context.js','tutor-context.min.js'],
   ['features/destinations.js','destinations.min.js'],
   ['ui/journey-view.js','journey-view.min.js'],
