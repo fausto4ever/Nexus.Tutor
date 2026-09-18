@@ -1,38 +1,24 @@
 (()=>{
 'use strict';
-const KEY='nexusTutorPickupLabV2';
-const modes=[
- {studentId:'1001',mode:'SCHEDULED',title:'Sin ubicación',contextMode:'scheduled'},
- {studentId:'1002',mode:'ETA',title:'GPS solo ETA',contextMode:'eta'},
- {studentId:'1003',mode:'GPS',title:'GPS ALL',contextMode:'gps'}
-];
+const KEY='nexusTutorPickupLabV3';
+const MODES={scheduled:'SCHEDULED',eta:'ETA',gps:'GPS'};
+const TERMINAL=new Set(['CANCELLED','COMPLETED','EXPIRED']);
 const read=()=>{try{return JSON.parse(localStorage.getItem(KEY)||'{}')||{};}catch{return{};}};
 const write=v=>localStorage.setItem(KEY,JSON.stringify(v));
-const contextFor=m=>window.NEXUS_TUTOR_CONTEXT?.profiles?.[m.contextMode]||null;
-const studentFor=m=>{const context=contextFor(m);return context?.students?.find(s=>String(s.studentId)===String(m.studentId))||context?.students?.[0]||null;};
-const requestGateway=async payload=>window.GatewayClient.createPickupRequest(payload);
-const cancelGateway=async request=>window.GatewayClient.cancelPickupRequest(request.requestId);
-function stateText(r){if(!r)return'SIN SOLICITUD';return `${r.status}${r.etaMinutes!=null?` · ETA ${r.etaMinutes} min`:''}`;}
-function render(){const state=read();for(const m of modes){const card=document.querySelector(`[data-lab-student="${m.studentId}"]`);if(!card)continue;const r=state[m.studentId];card.querySelector('.lab-status').textContent=stateText(r);card.querySelector('.lab-start').hidden=Boolean(r&& !['CANCELLED','COMPLETED','EXPIRED'].includes(r.status));card.querySelector('.lab-cancel').hidden=!r||['CANCELLED','COMPLETED','EXPIRED'].includes(r.status);}}
-async function start(m){
-  const state=read(),context=contextFor(m),student=studentFor(m);
-  if(!context||!student)throw new Error('Contexto de tutor/alumno no disponible.');
-  let distanceMeters=null,eta=null;
-  if(m.mode==='ETA'||m.mode==='GPS'){
-    const d=Number(localStorage.getItem('nexusTutorLabDistanceMeters')||document.querySelector('#manualDistanceInput')?.value||0);
-    if(Number.isFinite(d)&&d>=0)distanceMeters=d;
-    if(m.mode==='ETA'&&distanceMeters>0)eta=Math.max(1,Math.round((distanceMeters/1000)/20*60));
-  }
-  const payload={tutorId:context.tutor?.tutorId,studentId:student.studentId,mode:m.mode,arrivalMode:m.mode,locationId:student.pickupLocation?.locationId||null};
-  if(distanceMeters!==null)payload.distanceMeters=distanceMeters;
-  if(eta!==null)payload.etaMinutes=eta;
-  const result=await requestGateway(payload);
-  const request=result.request||result;
-  state[m.studentId]={requestId:request.requestId,status:request.status||'REQUESTED',mode:m.mode,createdAt:request.createdAt||new Date().toISOString(),etaMinutes:request.etaMinutes??eta,gateway:'CONNECTED',created:result.created===true,alreadyExists:result.alreadyExists===true};
-  write(state);render();return state[m.studentId];
-}
-async function cancel(m){const state=read(),r=state[m.studentId];if(!r)return;const result=await cancelGateway(r),request=result.request||result;r.status=request.status||'CANCELLED';r.cancelledAt=new Date().toISOString();write(state);render();return r;}
-function init(){const section=document.querySelector('#pickupLabModes');if(!section)return;for(const m of modes){const c=section.querySelector(`[data-lab-student="${m.studentId}"]`);if(!c)continue;c.querySelector('.lab-start').addEventListener('click',()=>start(m).catch(console.error));c.querySelector('.lab-cancel').addEventListener('click',()=>cancel(m).catch(console.error));}render();}
+const contextFor=mode=>window.NEXUS_TUTOR_CONTEXT?.profiles?.[mode]||null;
+const panelFor=mode=>document.querySelector(`#tab-${mode}`);
+const selectedIds=mode=>window.NEXUS_TUTOR_CONTEXT?.selectedStudentIds(panelFor(mode))||[];
+const tutorIdFor=mode=>contextFor(mode)?.tutor?.tutorId||window.NEXUS_TUTOR_CONTEXT?.LAB_TUTORS?.[mode];
+const requestIdsFor=mode=>Object.values(read()[mode]?.requests||{}).filter(r=>r.requestId&&!TERMINAL.has(r.status)).map(r=>r.requestId);
+function paint(mode){const panel=panelFor(mode),bucket=read()[mode]||{},requests=bucket.requests||{};if(!panel)return;panel.querySelectorAll('[data-request-summary]').forEach(node=>{const items=Object.values(requests);node.textContent=items.length?items.map(r=>`${r.studentName||r.studentId}: ${r.status||r.result}`).join(' · '):'Sin solicitudes';});const active=Object.values(requests).some(r=>r.requestId&&!TERMINAL.has(r.status));panel.querySelectorAll('[data-create-batch]').forEach(b=>b.disabled=active);panel.querySelectorAll('[data-refresh-batch]').forEach(b=>b.disabled=!active);panel.querySelectorAll('[data-cancel-batch]').forEach(b=>b.disabled=!active);}
+function distance(){const value=Number(localStorage.getItem('nexusTutorLabDistanceMeters')||document.querySelector('#manualDistanceInput')?.value||0);return Number.isFinite(value)&&value>=0?value:0;}
+async function create(mode){const context=contextFor(mode),studentIds=selectedIds(mode),tutorId=tutorIdFor(mode);if(!context)throw new Error('Contexto de tutor no disponible.');if(!studentIds.length)throw new Error('Selecciona al menos un alumno.');const payload={tutorId,studentIds,mode:MODES[mode]};if(mode==='gps')payload.distanceMeters=distance();if(mode==='eta')payload.etaMinutes=Math.max(1,Math.round((distance()/1000)/20*60));if(mode==='scheduled')payload.scheduledAt=new Date(Date.now()+20*60000).toISOString();const result=await window.GatewayClient.createPickupRequests(payload);const state=read(),bucket=state[mode]||{requests:{}};bucket.requests=bucket.requests||{};for(const item of result.results||[]){const student=context.students.find(s=>String(s.studentId)===String(item.studentId));const request=item.request||{};bucket.requests[item.studentId]={studentId:String(item.studentId),studentName:student?.name||String(item.studentId),result:item.result||item.code||'UNKNOWN',requestId:request.requestId||item.requestId||null,status:request.status||item.status||(item.result==='CREATED'?'REQUESTED':item.result),mode:MODES[mode]};}state[mode]=bucket;write(state);paint(mode);return result;}
+async function refresh(mode){const ids=requestIdsFor(mode);if(!ids.length)return null;const result=await window.GatewayClient.pickupStatus(tutorIdFor(mode),ids);const state=read(),bucket=state[mode]||{requests:{}};for(const item of result.requests||result.results||[]){const entry=Object.values(bucket.requests||{}).find(r=>r.requestId===item.requestId);if(entry)entry.status=item.status||entry.status;}state[mode]=bucket;write(state);paint(mode);return result;}
+async function gps(mode='gps'){const ids=requestIdsFor(mode);if(!ids.length)return null;const result=await window.GatewayClient.updatePickupGps(tutorIdFor(mode),ids,distance());const state=read(),bucket=state[mode]||{requests:{}};for(const item of result.requests||result.results||[]){const entry=Object.values(bucket.requests||{}).find(r=>r.requestId===item.requestId);if(entry)entry.status=item.status||entry.status;}state[mode]=bucket;write(state);paint(mode);return result;}
+async function cancel(mode){const state=read(),bucket=state[mode]||{requests:{}};for(const entry of Object.values(bucket.requests||{})){if(!entry.requestId||TERMINAL.has(entry.status))continue;const result=await window.GatewayClient.cancelPickupRequest(entry.requestId);entry.status=result.request?.status||result.status||'CANCELLED';}state[mode]=bucket;write(state);paint(mode);}
+function bind(mode){const panel=panelFor(mode);if(!panel)return;panel.querySelector('[data-create-batch]')?.addEventListener('click',()=>create(mode).catch(console.error));panel.querySelector('[data-refresh-batch]')?.addEventListener('click',()=>refresh(mode).catch(console.error));panel.querySelector('[data-cancel-batch]')?.addEventListener('click',()=>cancel(mode).catch(console.error));panel.querySelector('[data-gps-batch]')?.addEventListener('click',()=>gps(mode).catch(console.error));paint(mode);}
+function init(){Object.keys(MODES).forEach(bind);}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
-window.NEXUS_TUTOR_PICKUP_LAB={requestGateway,cancelGateway,start,cancel,read};
+window.addEventListener('nexus:tutor-students-rendered',event=>paint(event.detail.mode));
+window.NEXUS_TUTOR_PICKUP_LAB={create,refresh,gps,cancel,read};
 })();
