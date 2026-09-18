@@ -18,6 +18,7 @@ const JS_ASSETS=[
   ['features/destinations.js','destinations.min.js'],
   ['ui/journey-view.js','journey-view.min.js'],
   ['features/journey.js','journey.min.js'],
+  ['features/lab-pickup-modes.js','lab-pickup-modes.min.js'],
   ['ui/shell.js','shell.min.js']
 ];
 const CSS_ASSETS=[['css/nexus-tutor.css','nexus-tutor.min.css']];
