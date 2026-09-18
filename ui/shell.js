@@ -22,5 +22,4 @@
   function syncScreenWakeLock(){if(activeJourney()&&document.visibilityState!=='hidden')requestScreenWakeLock();else releaseScreenWakeLock();}
   applyTheme(storedTheme()||systemTheme(),{persist:false});const savedTab=localStorage.getItem(TAB_KEY);activateTab(savedTab&&availableTab(savedTab)?savedTab:'tab-tracking',{persist:false});themeBtn?.addEventListener('click',toggleTheme);for(const button of navButtons)button.addEventListener('click',()=>activateTab(button.dataset.tab));try{const media=window.matchMedia?.('(prefers-color-scheme: dark)');media?.addEventListener?.('change',event=>{if(!storedTheme())applyTheme(event.matches?'dark':'light',{persist:false});});}catch{}
   document.addEventListener('visibilitychange',syncScreenWakeLock);setInterval(syncScreenWakeLock,1000);syncScreenWakeLock();window.NEXUS_TUTOR_UI={applyTheme,activateTab,syncScreenWakeLock};
-  const labScript=document.createElement('script');labScript.src='features/lab-pickup-modes.js?v=0.1.13';labScript.defer=true;document.body.appendChild(labScript);
 })();
