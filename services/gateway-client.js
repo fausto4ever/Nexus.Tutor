@@ -1,13 +1,11 @@
 (()=>{
   'use strict';
 
-  const cfg=window.NEXUS_TUTOR_DEFAULTS||{};
-  const baseUrl=String(cfg.gatewayBaseUrl||'').replace(/\/$/,'');
+  const cfg=window.APP_INSTANCE||{};
+  const baseUrl=String(cfg.GATEWAY_URL||'').replace(/\/$/,'');
   const nativeFetch=window.fetch.bind(window);
 
-  const GET_ROUTES={
-    health:'/api/version'
-  };
+  const GET_ROUTES={health:'/api/version'};
 
   function endpoint(path){
     if(!baseUrl)throw new Error('Gateway no configurado.');
@@ -22,6 +20,8 @@
       const err=new Error(data?.detail||data?.error||`Gateway HTTP ${response.status}`);
       err.code=data?.code||data?.error||'';
       err.id=data?.id||'';
+      err.expectedRevision=data?.expectedRevision;
+      err.currentRevision=data?.currentRevision;
       throw err;
     }
     return data;
@@ -30,21 +30,19 @@
   async function get(action,params={}){
     const route=GET_ROUTES[action];
     if(!route)throw new Error(`GET action no soportada por Gateway: ${action}`);
-    const target=new URL(endpoint(route));
-    for(const [key,value] of Object.entries(params)){
-      if(value!==''&&value!==undefined&&value!==null)target.searchParams.set(key,String(value));
-    }
-    return parseResponse(await nativeFetch(target,{cache:'no-store',headers:{Accept:'application/json'}}));
+    const url=new URL(endpoint(route));
+    for(const [key,value] of Object.entries(params))if(value!==''&&value!==undefined&&value!==null)url.searchParams.set(key,String(value));
+    return parseResponse(await nativeFetch(url,{cache:'no-store'}));
   }
 
   async function bootstrap(){
-    return parseResponse(await nativeFetch(endpoint('/bootstrap'),{cache:'no-store',headers:{Accept:'application/json'}}));
+    return parseResponse(await nativeFetch(endpoint('/bootstrap'),{cache:'no-store'}));
   }
 
   async function tutor(tutorId){
     const id=String(tutorId||'').trim();
     if(!id)throw new Error('tutorId requerido.');
-    return parseResponse(await nativeFetch(endpoint(`/api/tutors/${encodeURIComponent(id)}`),{cache:'no-store',headers:{Accept:'application/json'}}));
+    return parseResponse(await nativeFetch(endpoint(`/api/tutors/${encodeURIComponent(id)}`),{cache:'no-store'}));
   }
 
   window.GatewayClient=Object.freeze({baseUrl,get,bootstrap,tutor});
