@@ -1,1 +1,1 @@
-window.GPS_LAB_CONFIG={version:'0.1.201',gatewayUrl:'https://control-acceso-gateway.shindarked.workers.dev',poll:{REQUESTED:60000,WAITING:30000,READY:10000,AT_GATE:10000},thresholds:{waiting:1000,ready:100,gate:20}};
+window.GPS_LAB_CONFIG={version:'0.1.202',gatewayUrl:'https://control-acceso-gateway.shindarked.workers.dev',poll:{REQUESTED:60000,WAITING:30000,READY:10000,AT_GATE:10000},thresholds:{waiting:1000,ready:100,gate:20}};
