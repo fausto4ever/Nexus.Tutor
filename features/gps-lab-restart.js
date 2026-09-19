@@ -4,11 +4,7 @@ const KEY='nexusTutorPickupLabV3';
 const TELEMETRY_KEY='nexusTutorGpsTelemetryV1';
 const LOG_KEY='nexusTutorGpsLogV1';
 const panel=()=>document.querySelector('#tab-gps');
-function clearLocal(){
-  window.NEXUS_TUTOR_LOCATION?.stop?.();
-  try{const state=JSON.parse(localStorage.getItem(KEY)||'{}');state.gps={requests:{}};localStorage.setItem(KEY,JSON.stringify(state));}catch{localStorage.setItem(KEY,JSON.stringify({gps:{requests:{}}}));}
-  localStorage.removeItem(TELEMETRY_KEY);
-  localStorage.removeItem(LOG_KEY);
+function clearVisuals(){
   const p=panel();if(!p)return;
   p.querySelectorAll('[data-request-summary]').forEach(n=>n.textContent='Sin solicitudes');
   const status=p.querySelector('[data-gps-status]');if(status){status.textContent='SIN SOLICITUD';status.className='status-pill status-outside';}
@@ -23,11 +19,19 @@ function clearLocal(){
   p.querySelectorAll('[data-refresh-batch],[data-cancel-batch],[data-gps-batch]').forEach(b=>b.disabled=true);
   const create=p.querySelector('[data-create-batch]');if(create)create.disabled=false;
 }
+function fallbackClear(){
+  try{const state=JSON.parse(localStorage.getItem(KEY)||'{}');state.gps={requests:{}};localStorage.setItem(KEY,JSON.stringify(state));}catch{localStorage.setItem(KEY,JSON.stringify({gps:{requests:{}}}));}
+  localStorage.removeItem(TELEMETRY_KEY);localStorage.removeItem(LOG_KEY);clearVisuals();
+}
 function resetLocal(){
   const button=panel()?.querySelector('[data-delete-gps-requests]');
   if(button){button.disabled=true;button.textContent='Borrando…';}
-  clearLocal();
-  if(button){button.disabled=false;button.textContent='Borrar requests';}
+  try{
+    const lab=window.NEXUS_TUTOR_PICKUP_LAB;
+    if(lab?.resetGpsRequestState)lab.resetGpsRequestState();else fallbackClear();
+    clearVisuals();
+  }catch(error){console.error('GPS_LAB_RESET_FAILED',error);fallbackClear();}
+  finally{if(button){button.disabled=false;button.textContent='Borrar requests';}}
 }
 function ensureButton(){
   const p=panel();if(!p||p.querySelector('[data-delete-gps-requests]'))return;
@@ -38,5 +42,5 @@ function ensureButton(){
 function bind(){ensureButton();}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind,{once:true});else bind();
 window.addEventListener('nexus:tutor-students-rendered',event=>{if(event.detail?.mode==='gps')ensureButton();});
-window.NEXUS_TUTOR_GPS_RESTART={reset:resetLocal,clearLocal};
+window.NEXUS_TUTOR_GPS_RESTART={reset:resetLocal,clearLocal:fallbackClear};
 })();
