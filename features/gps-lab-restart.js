@@ -4,7 +4,6 @@ const KEY='nexusTutorPickupLabV3';
 const TELEMETRY_KEY='nexusTutorGpsTelemetryV1';
 const LOG_KEY='nexusTutorGpsLogV1';
 const panel=()=>document.querySelector('#tab-gps');
-function requestIds(){try{const state=JSON.parse(localStorage.getItem(KEY)||'{}');return Object.values(state?.gps?.requests||{}).map(r=>r?.requestId).filter(Boolean);}catch{return[];}}
 function clearLocal(){
   window.NEXUS_TUTOR_LOCATION?.stop?.();
   try{const state=JSON.parse(localStorage.getItem(KEY)||'{}');state.gps={requests:{}};localStorage.setItem(KEY,JSON.stringify(state));}catch{localStorage.setItem(KEY,JSON.stringify({gps:{requests:{}}}));}
@@ -24,25 +23,20 @@ function clearLocal(){
   p.querySelectorAll('[data-refresh-batch],[data-cancel-batch],[data-gps-batch]').forEach(b=>b.disabled=true);
   const create=p.querySelector('[data-create-batch]');if(create)create.disabled=false;
 }
-async function resetGatewayAndLocal(){
-  const ids=requestIds();
+function resetLocal(){
   const button=panel()?.querySelector('[data-delete-gps-requests]');
   if(button){button.disabled=true;button.textContent='Borrando…';}
-  try{
-    for(const id of ids){try{await window.GatewayClient?.cancelPickupRequest?.(id);}catch(error){console.warn('GPS_REQUEST_CANCEL_FAILED',id,error);}}
-  }finally{
-    clearLocal();
-    if(button){button.disabled=false;button.textContent='Borrar requests';}
-  }
+  clearLocal();
+  if(button){button.disabled=false;button.textContent='Borrar requests';}
 }
 function ensureButton(){
   const p=panel();if(!p||p.querySelector('[data-delete-gps-requests]'))return;
   const cancel=p.querySelector('[data-cancel-batch]');
-  const button=document.createElement('button');button.type='button';button.className='secondary-btn';button.dataset.deleteGpsRequests='';button.textContent='Borrar requests';button.addEventListener('click',resetGatewayAndLocal);
+  const button=document.createElement('button');button.type='button';button.className='secondary-btn';button.dataset.deleteGpsRequests='';button.textContent='Borrar requests';button.addEventListener('click',resetLocal);
   if(cancel)cancel.insertAdjacentElement('afterend',button);else p.appendChild(button);
 }
 function bind(){ensureButton();}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind,{once:true});else bind();
 window.addEventListener('nexus:tutor-students-rendered',event=>{if(event.detail?.mode==='gps')ensureButton();});
-window.NEXUS_TUTOR_GPS_RESTART={reset:resetGatewayAndLocal,clearLocal};
+window.NEXUS_TUTOR_GPS_RESTART={reset:resetLocal,clearLocal};
 })();
