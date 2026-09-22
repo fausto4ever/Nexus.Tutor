@@ -1,1 +1,1 @@
-window.TUTOR_EXPERIENCE_CONFIG={version:'0.1.205',gatewayUrl:'https://control-acceso-gateway.shindarked.workers.dev',poll:{REQUESTED:60000,WAITING:30000,READY:10000,AT_GATE:5000},thresholds:{waiting:1000,ready:100,gate:20}};
+window.TUTOR_EXPERIENCE_CONFIG={version:'0.1.206',gatewayContract:'0.20.9',gatewayUrl:'https://control-acceso-gateway.shindarked.workers.dev',locale:'es-MX',timeZone:'America/Mexico_City',poll:{REQUESTED:60000,WAITING:30000,READY:10000,AT_GATE:5000},thresholds:{waiting:1000,ready:100,gate:20}};
