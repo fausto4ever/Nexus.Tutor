@@ -1,0 +1,25 @@
+(()=>{
+  'use strict';
+  const THEME_KEY='nexusTutorThemeV1';
+  const TAB_KEY='nexusTutorTabV1';
+  const JOURNEY_KEY='nexusTutorJourneyV1';
+  const root=document.documentElement;
+  const themeBtn=document.querySelector('#themeToggleBtn');
+  const themeIcon=document.querySelector('#themeIcon');
+  const themeMeta=document.querySelector('meta[name="theme-color"]');
+  const navButtons=[...document.querySelectorAll('.nav-btn')];
+  const tabPanels=[...document.querySelectorAll('.tab-content')];
+  let screenWakeLock=null,wakeLockRequestInFlight=false;
+  function systemTheme(){try{return window.matchMedia?.('(prefers-color-scheme: dark)').matches?'dark':'light';}catch{return'light';}}
+  function storedTheme(){const value=localStorage.getItem(THEME_KEY);return value==='light'||value==='dark'?value:null;}
+  function applyTheme(theme,{persist=true}={}){const next=theme==='dark'?'dark':'light';root.dataset.theme=next;if(themeMeta)themeMeta.setAttribute('content',next==='dark'?'#0b0f19':'#f8fafc');if(themeIcon)themeIcon.textContent=next==='dark'?'☀':'☾';if(themeBtn){themeBtn.setAttribute('aria-label',next==='dark'?'Cambiar a modo claro':'Cambiar a modo oscuro');themeBtn.setAttribute('title',next==='dark'?'Modo claro':'Modo oscuro');}if(persist)localStorage.setItem(THEME_KEY,next);}
+  function toggleTheme(){applyTheme(root.dataset.theme==='dark'?'light':'dark');}
+  function availableTab(id){return tabPanels.some(panel=>panel.id===id);}
+  function activateTab(id,{persist=true}={}){const next=availableTab(id)?id:'tab-tracking';for(const panel of tabPanels){const active=panel.id===next;panel.classList.toggle('active',active);panel.hidden=!active;}for(const button of navButtons){const active=button.dataset.tab===next;button.classList.toggle('active',active);button.setAttribute('aria-selected',String(active));button.setAttribute('tabindex',active?'0':'-1');}if(persist)localStorage.setItem(TAB_KEY,next);}
+  function activeJourney(){try{const journey=JSON.parse(localStorage.getItem(JOURNEY_KEY)||'null');return Boolean(journey?.active&&journey?.status!=='COMPLETED');}catch{return false;}}
+  async function requestScreenWakeLock(){if(!activeJourney()||document.visibilityState==='hidden'||screenWakeLock||wakeLockRequestInFlight||!navigator.wakeLock?.request)return;wakeLockRequestInFlight=true;try{const lock=await navigator.wakeLock.request('screen');screenWakeLock=lock;lock.addEventListener?.('release',()=>{if(screenWakeLock===lock)screenWakeLock=null;});}catch(error){console.warn('SCREEN_WAKE_LOCK_NOT_AVAILABLE',error);}finally{wakeLockRequestInFlight=false;}}
+  async function releaseScreenWakeLock(){const lock=screenWakeLock;screenWakeLock=null;if(!lock)return;try{await lock.release();}catch{}}
+  function syncScreenWakeLock(){if(activeJourney()&&document.visibilityState!=='hidden')requestScreenWakeLock();else releaseScreenWakeLock();}
+  applyTheme(storedTheme()||systemTheme(),{persist:false});const savedTab=localStorage.getItem(TAB_KEY);activateTab(savedTab&&availableTab(savedTab)?savedTab:'tab-tracking',{persist:false});themeBtn?.addEventListener('click',toggleTheme);for(const button of navButtons)button.addEventListener('click',()=>activateTab(button.dataset.tab));try{const media=window.matchMedia?.('(prefers-color-scheme: dark)');media?.addEventListener?.('change',event=>{if(!storedTheme())applyTheme(event.matches?'dark':'light',{persist:false});});}catch{}
+  document.addEventListener('visibilitychange',syncScreenWakeLock);setInterval(syncScreenWakeLock,1000);syncScreenWakeLock();window.NEXUS_TUTOR_UI={applyTheme,activateTab,syncScreenWakeLock};
+})();
