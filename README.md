@@ -1,89 +1,213 @@
 # Nexus.Tutor
 
-Nexus.Tutor es el laboratorio móvil del tutor para probar cercanía y el flujo «Voy por mi hijo» antes de conectarlo al Gateway de Control de Acceso.
+Nexus.Tutor es la PWA del tutor para el flujo de recogida y seguimiento de llegada del proyecto Control de Acceso.
 
-## Flujo actual
+## Estado actual
 
-1. Configurar uno o más destinos de prueba y elegir el destino activo.
-2. Obtener una medición válida por GPS/ruta o activar el simulador manual.
-3. Elegir el método de distancia: línea recta mediante GPS/Haversine o ruta en automóvil mediante OSRM para laboratorio.
-4. Con destino configurado y una medición fresca válida se habilita **VOY POR MI HIJO**, sin límite de kilometraje.
-5. Fuera del radio comienza en OUTSIDE; al acercarse avanza de forma monotónica a WAITING, READY y AT_GATE.
-6. OUTSIDE usa halo rojo y avisa que todavía se encuentra lejos; WAITING naranja; READY azul; AT_GATE verde.
-7. AT_GATE muestra **Has llegado. Esperando la entrega del alumno.**
-8. COMPLETED queda reservado para la futura confirmación de Nexus.Access/Gateway y muestra **Solicitud completada. ¡Que tengas un excelente día! Que les vaya muy bien.**
-9. El polling se adapta por cercanía: OUTSIDE 60 s, WAITING 30 s, READY 10 s y AT_GATE 10 s.
+La versión de trabajo es `0.1.14` y mantiene cuatro pestañas:
 
-## Interfaz 0.1.8
+1. Recorrido
+2. Mi QR
+3. Avisos
+4. QR temporal
 
-La aplicación conserva cuatro pestañas como estructura oficial:
+Las tres últimas siguen preparadas como funciones futuras; el flujo funcional actual está concentrado en Recorrido, Configuración y el laboratorio de solicitudes de recogida.
 
-- **Recorrido**: geolocalización, distancia, estados, simulador y telemetría.
-- **Mi QR**: reservada para la futura credencial QR real del tutor. No genera identificadores ficticios.
-- **Avisos**: reservada para notificaciones push de entrada/salida del alumno y mensajes operativos de la escuela.
-- **QR temporal**: preparada para autorizaciones temporales de 1 día, 1 semana o 1 mes; la generación real permanece deshabilitada hasta definir su lógica y seguridad.
+## Arquitectura
 
-La interfaz admite **modo claro y modo oscuro**. Si el usuario todavía no eligió uno, se respeta `prefers-color-scheme`; después se conserva la selección localmente. La pestaña activa también se recuerda en el dispositivo.
+- `config.js`: valores por defecto y migración inicial.
+- `core/runtime.js`: storage, eventos internos y utilidades DOM.
+- `services/location.js`: única frontera con `navigator.geolocation`.
+- `services/distance.js`: Haversine, ruta de laboratorio y fallback.
+- `services/telemetry.js`: historial y telemetría local.
+- `features/destinations.js`: destinos y configuración.
+- `features/journey.js`: coordinación del recorrido, mediciones y estados.
+- `features/lab-pickup-modes.js`: laboratorio de solicitudes y frontera placeholder con Gateway.
+- `ui/journey-view.js`: presentación del recorrido.
+- `ui/shell.js`: navegación y tema.
+- `css/nexus-tutor.css`: único stylesheet fuente.
 
-## Destinos de prueba
+`app.js` ya no participa en el arranque.
 
-La configuración conserva varios destinos sin sobrescribir el principal.
+## Recorrido
 
-- **Añadir destino** abre un borrador limpio.
-- El botón inferior cambia a **Guardar nuevo destino** y permanece visible al desplazar la configuración.
-- **Cancelar nuevo destino** restaura el destino anterior sin guardar el borrador.
-- Durante un trayecto activo se bloquea cambiar o editar el destino.
-- Los cambios quedan identificados en la telemetría JSON mediante `destinationId` y `destinationName`.
+La máquina de estados es monotónica:
 
-## Escala de distancia
+`OUTSIDE → WAITING → READY → AT_GATE → COMPLETED`
 
-La barra horizontal representa linealmente el rango operativo: WAITING es el límite máximo y 0 m representa 100%.
+El usuario puede iniciar el recorrido desde cualquier distancia siempre que exista un destino válido y una medición utilizable y fresca. Una vez alcanzado un estado, una medición posterior más lejana no lo degrada.
 
-Con `WAITING=1000`, `READY=100`, `AT_GATE=20`:
+`COMPLETED` no se determina por GPS. Queda reservado para confirmación de Nexus.Access/Gateway mediante el hook `window.NEXUS_TUTOR_COMPLETE_JOURNEY`.
 
-- 1500 m o más: 0%.
-- 1000 m: 0%.
-- 500 m: 50%.
-- 300 m: 70%.
-- 100 m: 90%.
-- 20 m: 98%.
-- 0 m: 100%.
+## Laboratorio de solicitudes
 
-READY y AT_GATE conservan su posición matemática, pero sus etiquetas se separan visualmente y apuntan a la posición exacta para evitar superposición.
+Las tres modalidades crean primero una solicitud `REQUESTED`:
 
-## GPS al volver a la app
+- `1001 / NO_GPS`: solicitud sin ubicación ni ETA; permanece `REQUESTED` hasta una acción externa.
+- `1002 / ETA_ONCE`: una lectura inicial permite calcular ETA; puede evolucionar estimativamente a `WAITING` y `READY`, pero no a `AT_GATE` sólo por tiempo.
+- `1003 / GPS_ALL`: seguimiento continuo; puede evolucionar `REQUESTED → WAITING → READY → AT_GATE` según distancia.
 
-Al volver del segundo plano:
+Umbrales actuales de laboratorio: `WAITING=1000 m`, `READY=100 m`, `AT_GATE=20 m`.
 
-- se conserva visible la última distancia válida;
-- se muestra **Recalculando ubicación…**;
-- se solicita una lectura fresca con `maximumAge: 0`;
-- una lectura stale/recalculating no puede iniciar ni promover estados;
-- si falla GPS, se conserva la última distancia como **Última ubicación conocida**;
-- el estado alcanzado no retrocede.
+Los tres modos permiten `Cancelar solicitud`. Cancelar no genera una salida del alumno.
 
-## Conectividad y telemetría
+## Contrato requerido a Gateway
 
-La interfaz muestra **En línea / Sin internet**. Es disponibilidad de red, no todavía un health check del Gateway.
+La implementación de Tutor mantiene por ahora llamadas placeholder. El Gateway deberá exponer estos cuatro contratos mínimos. Las rutas son el contrato propuesto para coordinar ambos repositorios y pueden ajustarse en Gateway manteniendo la misma semántica.
 
-La telemetría permanece local hasta que el usuario pulsa **Descargar JSON**. Registra recorrido, destino, distancia, precisión, fuente, frescura GPS, coordenadas cuando existen, visibilidad, conectividad, cambios de estado, polling y errores/recuperación GPS.
+### 1. Crear solicitud
 
-## Build de producción
+`POST /api/requests`
 
-El build minifica y ofusca JavaScript, minifica CSS/HTML, versiona recursos y no genera sourcemaps. El service worker usa una caché distinta por versión para evitar mezclar recursos anteriores.
+Payload mínimo:
 
-## Versión 0.1.8
+```json
+{
+  "studentId": "1001",
+  "mode": "NO_GPS"
+}
+```
 
-- Activación anticipada desde cualquier distancia con medición fresca.
-- OUTSIDE → WAITING → READY → AT_GATE → COMPLETED.
-- Halos y mensajes por estado.
-- Conservación de última distancia y recálculo al volver a la app.
-- Polling adaptativo 60/30/10 s.
-- Barra lineal y marcadores proporcionales.
-- Indicador de conexión.
-- Telemetría JSON local.
-- Múltiples destinos y flujo explícito de guardar/cancelar.
-- Selector Light/Dark persistente.
-- Navegación inferior con Recorrido, Mi QR, Avisos y QR temporal.
-- QR temporal preparado para 1 día / 1 semana / 1 mes, sin generación ficticia.
-- Pruebas automatizadas para lógica, destinos e interfaz.
+`mode` admite `NO_GPS`, `ETA_ONCE` o `GPS_ALL`.
+
+Para `ETA_ONCE`, Tutor agrega el ETA calculado al iniciar:
+
+```json
+{
+  "studentId": "1002",
+  "mode": "ETA_ONCE",
+  "etaMinutes": 20
+}
+```
+
+Respuesta mínima:
+
+```json
+{
+  "ok": true,
+  "requestId": "REQ-...",
+  "status": "REQUESTED"
+}
+```
+
+La creación debe ser idempotente frente a una solicitud activa del mismo alumno. Si ya existe, Gateway debe devolver/reutilizar la solicitud existente en vez de crear otra:
+
+```json
+{
+  "ok": true,
+  "existing": true,
+  "requestId": "REQ-...",
+  "status": "REQUESTED"
+}
+```
+
+Tutor conserva localmente `requestId` para las llamadas posteriores.
+
+### 2. Actualizar estado/proximidad
+
+`POST /api/requests/status`
+
+Payload:
+
+```json
+{
+  "requestId": "REQ-...",
+  "status": "WAITING",
+  "distanceMeters": 850
+}
+```
+
+Tutor puede reportar `WAITING`, `READY` o `AT_GATE`. `distanceMeters` es evidencia opcional y especialmente útil para `GPS_ALL`.
+
+Tutor calcula localmente geobarda/Haversine. No es requisito enviar latitud/longitud ni almacenar la ruta en Gateway.
+
+Gateway debe conservar estados monotónicos y responder con el estado autoritativo de la solicitud.
+
+### 3. Cancelar solicitud
+
+`POST /api/requests/cancel`
+
+```json
+{
+  "requestId": "REQ-..."
+}
+```
+
+Respuesta esperada:
+
+```json
+{
+  "ok": true,
+  "requestId": "REQ-...",
+  "status": "CANCELLED"
+}
+```
+
+Si la solicitud ya está `COMPLETED`, ese estado prevalece y Gateway no debe convertirla a `CANCELLED`. Tutor debe adoptar el estado autoritativo recibido.
+
+### 4. Recuperar solicitud activa
+
+`GET /api/requests/active?studentId=1001`
+
+Respuesta esperada cuando existe:
+
+```json
+{
+  "ok": true,
+  "request": {
+    "requestId": "REQ-...",
+    "studentId": "1001",
+    "status": "REQUESTED"
+  }
+}
+```
+
+Esta llamada permite recuperar una solicitud después de pérdida de Internet, cierre de la PWA o pérdida de la respuesta del POST inicial. Recuperar conexión debe continuar sobre la solicitud existente, no crear otra por defecto.
+
+### Reglas del contrato Tutor ↔ Gateway
+
+- Una solicitud confirmada por Gateway sobrevive a la pérdida de GPS/Internet de Tutor.
+- Silencio del cliente no significa cancelación.
+- Gateway es autoritativo sobre el estado remoto.
+- Tutor nunca degrada un estado confirmado por falta de comunicación.
+- `AT_GATE` requiere evidencia de presencia; `ETA_ONCE` no llega automáticamente a `AT_GATE`.
+- El GPS no es requisito para crear una solicitud.
+- Tutor no necesita enviar la ruta ni coordenadas históricas al Gateway.
+- `CANCELLED` no crea evento de salida.
+- `COMPLETED` prevalece frente a una cancelación tardía.
+
+La caducidad de solicitudes antiguas, el cierre desde Nexus.Access y los procesos de conciliación/sincronización son responsabilidades adicionales de Gateway y se documentan aparte; no forman parte de estos cuatro contratos mínimos requeridos por Tutor.
+
+## Distancia
+
+Modo directo: Haversine entre posición actual y destino.
+
+Modo ruta: OSRM para laboratorio, timeout de red y fallback automático a Haversine.
+
+El polling cambia según el estado y evita ejecutar dos mediciones periódicas al mismo tiempo.
+
+## Destinos
+
+Se pueden conservar varios destinos de prueba. Seleccionar un destino guardado lo activa inmediatamente y publica `config:changed`, por lo que la distancia se recalcula sin exigir Guardar. Durante un recorrido activo la configuración puede consultarse, pero sus controles editables quedan bloqueados.
+
+## CSS
+
+La interfaz utiliza una única hoja fuente: `css/nexus-tutor.css`. No deben reaparecer los estilos legacy `foundation.css`, `application.css`, `styles.css` ni `ui.css`.
+
+La base visual soporta tema claro/oscuro, `prefers-reduced-motion`, `:focus-visible`, safe areas, `100dvh` y layout móvil con ancho máximo de 500 px.
+
+## Desarrollo
+
+```bash
+npm install
+npm test
+npm run build
+```
+
+El build genera en `dist/` los JavaScript minificados/ofuscados y `nexus-tutor.min.css` sin sourcemaps. `config.js`, `package.json` y la versión de caché del Service Worker deben mantenerse sincronizados.
+
+## Política de trabajo
+
+El desarrollo actual continúa exclusivamente en `refactor/0.1.9-structure` hasta nueva instrucción.
+
+No crear ramas nuevas salvo instrucción explícita del usuario. No mergear, revertir, publicar ni escribir en `main` sin autorización explícita.
