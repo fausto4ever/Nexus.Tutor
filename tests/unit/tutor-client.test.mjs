@@ -101,3 +101,17 @@ test('Tutor 0.26: fallo de Gateway en cancelacion no se declara exitoso', async 
   const {api}=client({ok:false,error:'REQUEST_NOT_FOUND'});
   await assert.rejects(api.cancelPickupRequest('REQ-404'),e=>e.code==='REQUEST_NOT_FOUND');
 });
+
+test('Tutor: health consulta la ruta de version configurada sin cache',async()=>{
+  const {api,sent}=client({ok:true,version:'0.26.0'});
+  const response=await api.get('health');
+  assert.equal(sent.length,1);
+  assert.equal(sent[0].url,'https://qa.test/api/version');
+  assert.equal(sent[0].cache,'no-store');
+  assert.equal(response.version,'0.26.0');
+});
+
+test('Tutor: health no acepta como exito un error del Gateway',async()=>{
+  const {api}=client({ok:false,error:'UNAVAILABLE'});
+  await assert.rejects(api.get('health'),e=>e.code==='UNAVAILABLE');
+});
