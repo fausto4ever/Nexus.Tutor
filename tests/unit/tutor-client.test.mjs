@@ -63,3 +63,41 @@ test('Tutor: contrato de tiempo elimina timestamps de lifecycle enviados por el 
   assert.equal(body.requestedAt,undefined);
   assert.equal(body.distanceMeters,70);
 });
+
+test('Tutor 0.26: cancelacion envia requestId en JSON y nunca en la ruta', async () => {
+  const {api,sent}=client();
+  await api.cancelPickupRequest('REQ-001');
+  assert.equal(sent.length,1);
+  assert.equal(sent[0].method,'POST');
+  assert.equal(sent[0].url,'https://qa.test/api/pickup-requests/cancel');
+  assert.equal(JSON.parse(sent[0].body).requestId,'REQ-001');
+});
+
+test('Tutor 0.26: cancelacion sin requestId falla antes de hacer red', async () => {
+  const {api,sent}=client();
+  await assert.rejects(api.cancelPickupRequest('  '),/requestId requerido/);
+  assert.equal(sent.length,0);
+});
+
+test('Tutor 0.26: reintento de cancelacion conserva requestId y ruta', async () => {
+  const {api,sent}=client();
+  await api.cancelPickupRequest('REQ-002');
+  await api.cancelPickupRequest('REQ-002');
+  assert.equal(sent.length,2);
+  for (const call of sent) {
+    assert.equal(new URL(call.url).pathname,'/api/pickup-requests/cancel');
+    assert.equal(JSON.parse(call.body).requestId,'REQ-002');
+  }
+});
+
+test('Tutor 0.26: consulta de tutor conserva GET con identificador codificado', async () => {
+  const {api,sent}=client();
+  await api.tutor('T/1');
+  assert.equal(sent[0].url,'https://qa.test/api/tutors/T%2F1');
+  assert.equal(sent[0].method,undefined);
+});
+
+test('Tutor 0.26: fallo de Gateway en cancelacion no se declara exitoso', async () => {
+  const {api}=client({ok:false,error:'REQUEST_NOT_FOUND'});
+  await assert.rejects(api.cancelPickupRequest('REQ-404'),e=>e.code==='REQUEST_NOT_FOUND');
+});
