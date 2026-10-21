@@ -13,6 +13,6 @@
   async function createPickupRequests(payload){if(!Array.isArray(payload?.studentIds)||!payload.studentIds.length)throw new Error('studentIds[] requerido.');return post('/api/pickup-requests',payload);}
   async function pickupStatus(tutorId,requestIds){if(!Array.isArray(requestIds)||!requestIds.length)throw new Error('requestIds[] requerido.');return post('/api/pickup-requests/status',{tutorId,requestIds});}
   async function updatePickupGps(tutorId,requestIds,distanceMeters){if(!Array.isArray(requestIds)||!requestIds.length)throw new Error('requestIds[] requerido.');return post('/api/pickup-requests/gps',{tutorId,requestIds,distanceMeters});}
-  async function cancelPickupRequest(requestId){const id=String(requestId||'').trim();if(!id)throw new Error('requestId requerido.');return post(`/api/pickup-requests/${encodeURIComponent(id)}/cancel`,{});}
+  async function cancelPickupRequest(requestId){const id=String(requestId||'').trim();if(!id)throw new Error('requestId requerido.');return post('/api/pickup-requests/cancel',{requestId:id});}
   window.GatewayClient=Object.freeze({baseUrl,get,bootstrap,tutor,createPickupRequest:createPickupRequests,createPickupRequests,pickupStatus,updatePickupGps,cancelPickupRequest});
 })();
