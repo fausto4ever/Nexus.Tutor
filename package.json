@@ -1,1 +1,10 @@
-{"name":"nexus-tutor","version":"0.1.203","private":true,"scripts":{"build":"node scripts/build.mjs"}}
+{
+  "name": "nexus-tutor",
+  "version": "0.1.203",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test:unit": "node --test tests/unit/*.test.mjs",
+    "test": "npm run test:unit"
+  }
+}
