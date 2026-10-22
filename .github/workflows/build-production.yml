@@ -7,17 +7,18 @@ on:
   push:
     branches: [main]
     paths:
-      - 'app.js'
       - 'config.js'
-      - 'coordinates.js'
-      - 'styles.css'
+      - 'core/**'
+      - 'services/**'
+      - 'features/**'
+      - 'ui/**'
+      - 'css/**'
       - 'index.html'
       - 'sw.js'
       - 'manifest.webmanifest'
       - 'icon.svg'
       - 'package.json'
-      - 'scripts/build.mjs'
-      - 'scripts/test-history.mjs'
+      - 'scripts/**'
       - '.github/workflows/build-production.yml'
 
 permissions:
@@ -38,7 +39,7 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Test history
+      - name: Test
         run: npm test
 
       - name: Build production
@@ -46,24 +47,14 @@ jobs:
 
       - name: Validate production output
         run: |
-          test -f dist/index.html
-          test -f dist/app.min.js
-          test -f dist/config.min.js
-          test -f dist/coordinates.min.js
-          test -f dist/styles.min.css
-          test -f dist/sw.js
-          test -f dist/manifest.webmanifest
-          test -f dist/icon.svg
+          set -euo pipefail
+          for f in index.html gps.css gps-config.js gps.js tutor.html tutor.css tutor-health.css tutor-config.js pickup-time-contract.js tutor-observability.js tutor.js; do
+            test -s "dist/$f" || { echo "::error::Missing dist/$f"; exit 1; }
+          done
+          test -d dist/labo1
+          grep -q 'gps.js' dist/index.html
+          grep -q 'tutor.js' dist/tutor.html
           ! find dist -type f -name '*.map' | grep -q .
-          ! test -f dist/app.js
-          ! test -f dist/config.js
-          ! test -f dist/coordinates.js
-          ! test -f dist/styles.css
-          grep -q 'app.min.js' dist/index.html
-          grep -q 'config.min.js' dist/index.html
-          grep -q 'coordinates.min.js' dist/index.html
-          grep -q 'styles.min.css' dist/index.html
-
       - name: Commit dist
         if: github.event_name != 'pull_request'
         run: |
