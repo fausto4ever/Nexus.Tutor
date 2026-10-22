@@ -115,3 +115,23 @@ test('Tutor: health no acepta como exito un error del Gateway',async()=>{
   const {api}=client({ok:false,error:'UNAVAILABLE'});
   await assert.rejects(api.get('health'),e=>e.code==='UNAVAILABLE');
 });
+
+test('Tutor: exige Gateway 0.26.0 en el endpoint publico de version',async()=>{
+  const {api,sent}=client({ok:true,gateway:{version:'0.26.0'},backend:{apiVersion:'2.9.1'}});
+  const result=await api.assertGatewayVersion();
+  assert.equal(result.gateway.version,'0.26.0');
+  assert.equal(sent.length,1);
+  assert.equal(sent[0].url,'https://qa.test/api/gateway/version');
+  assert.equal(sent[0].cache,'no-store');
+});
+
+test('Tutor: detecta Gateway desplegado con version incompatible',async()=>{
+  const {api}=client({ok:true,gateway:{version:'0.25.0'}});
+  await assert.rejects(api.assertGatewayVersion(),e=>
+    e.code==='GATEWAY_VERSION_MISMATCH'&&e.expectedVersion==='0.26.0'&&e.actualVersion==='0.25.0');
+});
+
+test('Tutor: no acepta respuesta de version sin version',async()=>{
+  const {api}=client({ok:true});
+  await assert.rejects(api.assertGatewayVersion(),e=>e.code==='GATEWAY_VERSION_MISMATCH');
+});
