@@ -135,3 +135,47 @@ test('Tutor: no acepta respuesta de version sin version',async()=>{
   const {api}=client({ok:true});
   await assert.rejects(api.assertGatewayVersion(),e=>e.code==='GATEWAY_VERSION_MISMATCH');
 });
+
+test('Tutor GPS: cancelar solicitud activa usa exclusivamente contrato JSON 0.26, nunca legacy',async()=>{
+  const sent=[];
+  const window={
+    APP_INSTANCE:{GATEWAY_URL:'https://qa.test/'},
+    fetch:async(url,opt={})=>{
+      const call={url:String(url),...opt};
+      sent.push(call);
+      if(call.url.endsWith('/api/pickup-requests'))return Response.json({ok:true,results:[{studentId:'S1',requestId:'GPS-123',result:'CREATED'}]});
+      if(call.url.endsWith('/api/pickup-requests/cancel'))return Response.json({ok:true,requestId:'GPS-123',status:'CANCELLED'});
+      throw new Error('Ruta inesperada: '+call.url);
+    }
+  };
+  vm.runInNewContext(read('services/gateway-client.js'),{window,URL,Error});
+  const api=window.GatewayClient;
+  const created=await api.createPickupRequests({tutorId:'T1',studentIds:['S1'],mode:'GPS',distanceMeters:450});
+  const requestId=created.results[0].requestId;
+  const cancelled=await api.cancelPickupRequest(requestId);
+  assert.equal(cancelled.status,'CANCELLED');
+  assert.equal(sent.length,2,'Solo crear y cancelar; sin rutas duplicadas');
+  assert.equal(sent[0].method,'POST');
+  assert.equal(sent[0].url,'https://qa.test/api/pickup-requests');
+  assert.equal(JSON.parse(sent[0].body).mode,'GPS');
+  assert.equal(sent[1].method,'POST');
+  assert.equal(sent[1].url,'https://qa.test/api/pickup-requests/cancel');
+  assert.deepEqual(JSON.parse(sent[1].body),{requestId:'GPS-123'});
+  assert.equal(sent.some(call=>/\/api\/pickup-requests\/[^/]+\/cancel(?:\?|$)/.test(new URL(call.url).pathname)),false,
+    'La ruta legacy /api/pickup-requests/{requestId}/cancel queda prohibida');
+});
+
+test('Tutor GPS: cancelacion fallida no se considera CANCELLED ni recurre al endpoint legacy',async()=>{
+  const sent=[];
+  const window={
+    APP_INSTANCE:{GATEWAY_URL:'https://qa.test/'},
+    fetch:async(url,opt={})=>{
+      sent.push({url:String(url),...opt});
+      return Response.json({ok:false,error:'TEMPORARY_FAILURE'});
+    }
+  };
+  vm.runInNewContext(read('services/gateway-client.js'),{window,URL,Error});
+  await assert.rejects(window.GatewayClient.cancelPickupRequest('GPS-123'),e=>e.code==='TEMPORARY_FAILURE');
+  assert.equal(sent.length,1);
+  assert.equal(sent[0].url,'https://qa.test/api/pickup-requests/cancel');
+});
